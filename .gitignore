@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-crazygames/
+coverage/
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+.claude/

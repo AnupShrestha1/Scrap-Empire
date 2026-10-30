@@ -1,0 +1,25 @@
+{
+  "name": "scrap-empire",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Scrap Empire: a 2D recycling and manufacturing tycoon for CrazyGames.",
+  "scripts": {
+    "dev": "vite",
+    "dev:cg": "vite --mode crazygames",
+    "build": "tsc --noEmit && vite build",
+    "build:cg": "tsc --noEmit && vite build --mode crazygames",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
