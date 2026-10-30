@@ -1,14 +1,17 @@
 import Phaser from 'phaser';
 import { VIEW } from '../../config';
 import type { GameContext } from '../../context';
-import { Tile, tileAt, type Grid } from '../../sim/grid';
+import type { SimEvent } from '../../sim/events';
 import type { Facing } from '../../sim/state';
 import type { Vec2 } from '../../sim/vec';
-import { OBJECT_SIZE, type FenceDir } from '../art/objects';
 import { FEET_Y, PLAYER_SIZE } from '../art/player';
 import { bakeGround } from '../ground';
 import { depthAt, isoProjection, screenDirToGrid, toScreen, type IsoProjection } from '../iso';
 import { FRAME, SCENE, TEX } from '../keys';
+import { placeDecor } from '../world/decor';
+import { Labels } from '../world/labels';
+import { placePads } from '../world/pads';
+import { CarriedStackView, createStationViews, type StationViews } from '../world/stationViews';
 
 /**
  * Frame and mirroring per facing. On screen, grid +x runs down-right and +y down-left;
@@ -19,14 +22,6 @@ const FACING_FRAME: Readonly<Record<Facing, { frame: string; flip: boolean }>> =
   right: { frame: FRAME.playerFront, flip: true },
   up: { frame: FRAME.playerBack, flip: false },
   left: { frame: FRAME.playerBack, flip: true },
-};
-
-/** Grid offset to the neighbour in each fence direction. */
-const FENCE_NEIGHBOUR: Readonly<Record<FenceDir, readonly [number, number]>> = {
-  '+x': [1, 0],
-  '-x': [-1, 0],
-  '+y': [0, 1],
-  '-y': [0, -1],
 };
 
 /** Walking bob: height in render pixels and cycles per second. */
@@ -44,6 +39,12 @@ function smoothing(ratePerSecond: number, elapsedMs: number): number {
 export class WorldScene extends Phaser.Scene {
   private proj!: IsoProjection;
   private player!: Phaser.GameObjects.Image;
+  private labels!: Labels;
+  private stations!: StationViews;
+  private carried!: CarriedStackView;
+  private readonly simEvents: SimEvent[] = [];
+  /** Cash earned per station this frame, shown as one floating "+$" each. */
+  private readonly sales = new Map<string, number>();
   private readonly screenMove: Vec2 = { x: 0, y: 0 };
   private readonly gridMove: Vec2 = { x: 0, y: 0 };
   private readonly point: Vec2 = { x: 0, y: 0 };
@@ -57,23 +58,27 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create(): void {
-    const { grid } = this.ctx.sim;
+    const { grid, stations } = this.ctx.sim;
     this.proj = isoProjection(grid.width, grid.height);
 
     bakeGround(this.textures, TEX.ground, grid, this.proj);
     this.add.image(0, 0, TEX.ground).setOrigin(0).setDepth(-1);
-    this.placeObjects(grid);
+    placeDecor(this, this.proj, grid);
 
+    this.labels = new Labels(this);
+    placePads(this, this.proj, this.labels, stations);
+    this.stations = createStationViews(this, this.proj, this.labels, stations);
     this.player = this.add.image(0, 0, TEX.atlas, FRAME.playerFront).setOrigin(0.5, FEET_Y / PLAYER_SIZE.h);
-    this.syncPlayer(0);
+    this.carried = new CarriedStackView(this, this.labels);
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, this.proj.width, this.proj.height);
+    this.fitCamera();
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
+    this.render(0, 0);
     this.cameraX = this.player.x;
     this.cameraY = this.player.y;
     camera.centerOn(this.cameraX, this.cameraY);
-    this.fitCamera();
-    this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
 
     this.lastFrameAt = performance.now();
     document.getElementById('loader')?.remove();
@@ -81,7 +86,7 @@ export class WorldScene extends Phaser.Scene {
     this.ctx.platform.gameplayStart();
   }
 
-  override update(): void {
+  override update(time: number): void {
     const now = performance.now();
     const elapsed = now - this.lastFrameAt;
     this.lastFrameAt = now;
@@ -92,43 +97,20 @@ export class WorldScene extends Phaser.Scene {
     sim.setMoveInput(this.gridMove.x, this.gridMove.y);
     sim.advance(elapsed);
 
-    this.syncPlayer(elapsed);
+    this.sales.clear();
+    for (const event of sim.drainEvents(this.simEvents)) {
+      if (event.type === 'storageFull') this.stations.bins.get(event.station)?.flash(time);
+      if (event.type === 'sold') this.sales.set(event.station, (this.sales.get(event.station) ?? 0) + event.value);
+    }
+    for (const [station, value] of this.sales) this.showSale(station, value);
+    this.ctx.hud.update(sim.state);
+    this.render(elapsed, time);
     this.followPlayer(elapsed);
   }
 
-  /** Crates, and fences built from a post per tile plus half-runs towards each fenced neighbour. */
-  private placeObjects(grid: Grid): void {
-    const isFence = (x: number, y: number) =>
-      x >= 0 && y >= 0 && x < grid.width && y < grid.height && tileAt(grid, x, y) === Tile.Fence;
-
-    for (let y = 0; y < grid.height; y++) {
-      for (let x = 0; x < grid.width; x++) {
-        const tile = tileAt(grid, x, y);
-        if (tile === Tile.Crate) {
-          this.addObject(FRAME.crate, x + 1, y + 1, OBJECT_SIZE.crate.originY, depthAt(x + 0.5, y + 0.5));
-        } else if (tile === Tile.Fence) {
-          const cx = x + 0.5;
-          const cy = y + 0.5;
-          this.addObject(FRAME.fencePost, cx, cy, OBJECT_SIZE.fencePost.originY, depthAt(cx, cy));
-          for (const [dir, [dx, dy]] of Object.entries(FENCE_NEIGHBOUR) as [FenceDir, readonly [number, number]][]) {
-            if (!isFence(x + dx, y + dy)) continue;
-            const depth = depthAt(cx + dx * 0.25, cy + dy * 0.25);
-            this.addObject(FRAME.fenceRun(dir), cx, cy, OBJECT_SIZE.fenceRun.originY, depth);
-          }
-        }
-      }
-    }
-  }
-
-  /** Places an atlas frame so its anchor sits on grid point (gx, gy). */
-  private addObject(frame: string, gx: number, gy: number, originY: number, depth: number): void {
-    const at = toScreen(this.proj, gx, gy, this.point);
-    this.add.image(at.x, at.y, TEX.atlas, frame).setOrigin(0.5, originY).setDepth(depth);
-  }
-
-  /** Places the sprite between the last two ticks, picks its facing frame and bobs it while walking. */
-  private syncPlayer(elapsedMs: number): void {
-    const { state, prevPlayer, alpha } = this.ctx.sim;
+  private render(elapsedMs: number, timeMs: number): void {
+    const { sim } = this.ctx;
+    const { state, prevPlayer, alpha } = sim;
     const p = state.player;
     const gx = prevPlayer.x + (p.x - prevPlayer.x) * alpha;
     const gy = prevPlayer.y + (p.y - prevPlayer.y) * alpha;
@@ -137,9 +119,20 @@ export class WorldScene extends Phaser.Scene {
     const walking = p.x !== prevPlayer.x || p.y !== prevPlayer.y;
     this.walkTime = walking ? this.walkTime + elapsedMs / 1000 : 0;
     const bob = Math.abs(Math.sin(this.walkTime * BOB.rate * Math.PI)) * BOB.height;
-
+    const depth = depthAt(gx, gy);
     const look = FACING_FRAME[p.facing];
-    this.player.setFrame(look.frame).setFlipX(look.flip).setPosition(at.x, at.y - bob).setDepth(depthAt(gx, gy));
+    this.player.setFrame(look.frame).setFlipX(look.flip).setPosition(at.x, at.y - bob).setDepth(depth);
+    this.carried.update(sim, at.x, at.y - bob, depth);
+
+    for (const view of this.stations.views) view.update(sim, timeMs);
+  }
+
+  private showSale(station: string, value: number): void {
+    const def = this.ctx.sim.stations.find((s) => s.id === station);
+    if (!def) return;
+    const sell = def.kind === 'bin' ? def.zones.sell : def.rect;
+    const at = toScreen(this.proj, sell.x + sell.w / 2, sell.y + sell.h / 2);
+    this.labels.floating(`+$${value}`, at.x, at.y - 50);
   }
 
   private followPlayer(elapsedMs: number): void {
@@ -154,5 +147,6 @@ export class WorldScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const { w, h } = VIEW.minVisiblePx;
     this.cameras.main.setZoom(Math.min(width / w, height / h));
+    this.labels?.refit();
   }
 }

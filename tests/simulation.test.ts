@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { SIM } from '../src/config';
-import { YARD } from '../src/data/layout';
+import { STATIONS, YARD } from '../src/data/layout';
 import { parseGrid } from '../src/sim/grid';
 import { Simulation } from '../src/sim/simulation';
 import { createNewGame } from '../src/sim/state';
 
-const grid = parseGrid(YARD);
+const grid = parseGrid(YARD, STATIONS);
 
 function newSim(): Simulation {
-  const sim = new Simulation(createNewGame(grid), grid);
+  const sim = new Simulation(createNewGame(grid, STATIONS), grid, STATIONS, 'pile');
   sim.setMoveInput(1, 0.5);
   return sim;
 }
@@ -41,7 +41,7 @@ describe('Simulation', () => {
   });
 
   it('marks state dirty only when something changed', () => {
-    const sim = new Simulation(createNewGame(grid), grid);
+    const sim = new Simulation(createNewGame(grid, STATIONS), grid, STATIONS, 'pile');
     sim.advance(200);
     expect(sim.dirty).toBe(false);
     sim.setMoveInput(0, 1);

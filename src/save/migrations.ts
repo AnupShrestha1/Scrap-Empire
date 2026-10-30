@@ -1,12 +1,32 @@
 /** Current save format. Bump it, and add a migration, whenever GameState changes shape. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 3;
 
 export type Migration = (state: unknown) => unknown;
 
 /** `migrations[n]` upgrades a state saved at version n to version n + 1. */
 export type Migrations = Readonly<Record<number, Migration>>;
 
-export const MIGRATIONS: Migrations = {};
+type Json = Record<string, unknown>;
+
+export const MIGRATIONS: Migrations = {
+  /**
+   * v1 (M0 test yard: position only) → v2 (M1a: carried stack, truck, stations).
+   * Station state is left empty; sanitizeState fills it from the current layout.
+   */
+  1: (state) => {
+    const s = state as Json;
+    return {
+      ...s,
+      player: { ...(s.player as Json), stack: [] },
+      truck: { phase: 'away', timer: 1, load: 0 },
+      piles: {},
+      processors: {},
+      bins: {},
+    };
+  },
+  /** v2 (M1a) → v3: cash, for selling from bins. */
+  2: (state) => ({ ...(state as Json), money: 0 }),
+};
 
 /** Runs every migration from `from` up to `to`. Throws if one is missing. */
 export function migrate(

@@ -28,6 +28,42 @@ export class Pixels {
     this.rect(x, y, 1, 1, color);
   }
 
+  /**
+   * Filled polygon, scanned at pixel centres. With integer vertices, 2:1 isometric edges land on
+   * whole pixels, and polygons sharing an edge meet without gaps.
+   */
+  polygon(points: readonly (readonly [number, number])[], color: string): void {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const [, y] of points) {
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    const xs: number[] = [];
+    for (let row = Math.floor(minY); row < Math.ceil(maxY); row++) {
+      const yc = row + 0.5;
+      xs.length = 0;
+      for (let i = 0; i < points.length; i++) {
+        const [x0, y0] = points[i]!;
+        const [x1, y1] = points[(i + 1) % points.length]!;
+        if ((y0 <= yc && yc < y1) || (y1 <= yc && yc < y0)) xs.push(x0 + ((yc - y0) * (x1 - x0)) / (y1 - y0));
+      }
+      xs.sort((a, b) => a - b);
+      for (let i = 0; i + 1 < xs.length; i += 2) {
+        const x0 = Math.round(xs[i]!);
+        const x1 = Math.round(xs[i + 1]!);
+        if (x1 > x0) this.rect(x0, row, x1 - x0, 1, color);
+      }
+    }
+  }
+
+  /** Erases a polygon, e.g. to hollow out a shape into an outline. */
+  cutPolygon(points: readonly (readonly [number, number])[]): void {
+    this.ctx.globalCompositeOperation = 'destination-out';
+    this.polygon(points, '#000000');
+    this.ctx.globalCompositeOperation = 'source-over';
+  }
+
   /** Filled ellipse built from one-pixel rows, so it has no anti-aliased edge. */
   ellipse(cx: number, cy: number, rx: number, ry: number, color: string): void {
     for (let row = Math.floor(cy - ry); row < Math.ceil(cy + ry); row++) {

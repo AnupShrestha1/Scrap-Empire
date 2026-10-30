@@ -1,9 +1,9 @@
 import { PLAYER } from '../../data/player';
-import { boxHitsSolid, type Grid } from '../grid';
+import { forEachSolid, type Grid } from '../grid';
 import type { PlayerState } from '../state';
 import type { Vec2 } from '../vec';
 
-/** Keeps the player a hair away from walls so the next overlap test doesn't see them as touching. */
+/** Keeps the player a hair away from obstacles so the next overlap test doesn't see them as touching. */
 const EPSILON = 1e-4;
 
 /**
@@ -30,18 +30,20 @@ export function stepPlayer(player: PlayerState, move: Vec2, grid: Grid, dt: numb
   return player.x !== startX || player.y !== startY;
 }
 
-/** Moves along one axis and stops flush against the first solid tile. Steps must be under one tile. */
+/** Moves along one axis and stops flush against the nearest obstacle in the way. */
 function moveAxis(grid: Grid, x: number, y: number, delta: number, horizontal: boolean): number {
   const pos = horizontal ? x : y;
   if (delta === 0) return pos;
 
   const r = PLAYER.halfSize;
   const next = pos + delta;
-  const hit = horizontal
-    ? boxHitsSolid(grid, next - r, y - r, next + r, y + r)
-    : boxHitsSolid(grid, x - r, next - r, x + r, next + r);
-  if (!hit) return next;
+  let limit = next;
+  const clamp = (lo: number, hi: number) => {
+    limit = delta > 0 ? Math.min(limit, lo - r - EPSILON) : Math.max(limit, hi + r + EPSILON);
+  };
+  if (horizontal) forEachSolid(grid, next - r, y - r, next + r, y + r, (x0, _y0, x1) => clamp(x0, x1));
+  else forEachSolid(grid, x - r, next - r, x + r, next + r, (_x0, y0, _x1, y1) => clamp(y0, y1));
 
-  // The blocking tile is the one the leading edge just entered.
-  return delta > 0 ? Math.ceil(next + r) - 1 - r - EPSILON : Math.floor(next - r) + 1 + r + EPSILON;
+  // Never get pushed backwards (only possible if already touching something).
+  return delta > 0 ? Math.max(pos, limit) : Math.min(pos, limit);
 }

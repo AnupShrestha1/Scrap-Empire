@@ -1,3 +1,6 @@
+import type { ItemId } from '../data/items';
+import type { ProcessorStatus } from '../sim/events';
+
 export const TEX = {
   ground: 'ground',
   atlas: 'atlas',
@@ -9,6 +12,16 @@ export const FRAME = {
   crate: 'crate',
   fencePost: 'fence-post',
   fenceRun: (dir: string) => `fence-${dir}`,
+  tree: (variant: number) => `tree-${variant}`,
+  lampPost: 'lamp-post',
+  booth: 'booth',
+  pile: (stage: number) => `pile-${stage}`,
+  shredder: (frame: number) => `shredder-${frame}`,
+  lamp: (status: ProcessorStatus) => `lamp-${status}`,
+  bin: (item: string, level: number) => `bin-${item}-${level}`,
+  truck: (loaded: boolean) => (loaded ? 'truck-loaded' : 'truck-empty'),
+  item: (item: ItemId) => `item-${item}`,
+  pad: (station: string, zone: string) => `pad-${station}-${zone}`,
 } as const;
 
 export const SCENE = {

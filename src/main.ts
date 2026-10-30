@@ -1,15 +1,16 @@
 import './ui/styles.css';
 import type { GameContext } from './context';
-import { YARD } from './data/layout';
+import { STATIONS, TRUCK_ROUTE, YARD } from './data/layout';
 import { DebugOverlay } from './debug/overlay';
 import { t } from './i18n';
 import { InputManager } from './input';
 import { createPlatform } from './platform';
 import { AutoSaver } from './save/autosave';
-import { SaveManager } from './save/saveManager';
+import { SAVE_KEYS, SaveManager } from './save/saveManager';
 import { parseGrid } from './sim/grid';
 import { Simulation } from './sim/simulation';
 import { createNewGame, isGameState, sanitizeState } from './sim/state';
+import { Hud } from './ui/hud';
 import { createGame } from './view/game';
 
 async function boot(): Promise<void> {
@@ -19,13 +20,13 @@ async function boot(): Promise<void> {
   const platform = await createPlatform();
   platform.loadingStart();
 
-  const grid = parseGrid(YARD);
+  const grid = parseGrid(YARD, STATIONS);
   const saves = new SaveManager(platform.storage, isGameState);
   const loaded = saves.load();
   if (loaded?.fromBackup) console.warn('Main save was unreadable; restored the backup');
-  const state = loaded ? sanitizeState(loaded.state, grid) : createNewGame(grid);
+  const state = loaded ? sanitizeState(loaded.state, grid, STATIONS) : createNewGame(grid, STATIONS);
 
-  const sim = new Simulation(state, grid);
+  const sim = new Simulation(state, grid, STATIONS, TRUCK_ROUTE.pile);
   const autosave = new AutoSaver(saves, sim);
   autosave.start();
 
@@ -33,9 +34,15 @@ async function boot(): Promise<void> {
   gameEl.addEventListener('pointerdown', () => window.focus());
   const input = new InputManager(window, gameEl, uiEl);
 
-  const ctx: GameContext = { platform, sim, input };
+  const ctx: GameContext = { platform, sim, input, hud: new Hud(uiEl) };
   const game = createGame(gameEl, ctx);
-  new DebugOverlay(uiEl, game, ctx);
+  new DebugOverlay(uiEl, game, ctx, {
+    resetSave: () => {
+      autosave.stop();
+      for (const key of Object.values(SAVE_KEYS)) platform.storage.removeItem(key);
+      location.reload();
+    },
+  });
 
   if (import.meta.env.DEV) Object.assign(window, { scrap: { ...ctx, saves, autosave, game } });
 }

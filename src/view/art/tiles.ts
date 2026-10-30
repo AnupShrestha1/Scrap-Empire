@@ -73,14 +73,58 @@ const road = pixelArt(
   { outline: false },
 );
 
-/** Ground tile art. Fences and crates are upright objects drawn on top (see objects.ts). */
-export const TILESET: readonly Draw[] = [dirt(1), dirt(2), dirt(3), concrete, road];
+function grass(seed: number): Draw {
+  return pixelArt(
+    (p) => {
+      const rand = seededRandom(seed);
+      p.rect(0, 0, p.w, p.h, C.grass);
+      speckle(p, rand, C.grassDark, 26);
+      for (let i = 0; i < 10; i++) {
+        const x = Math.floor(rand() * p.w);
+        const y = 1 + Math.floor(rand() * (p.h - 2));
+        p.rect(x, y, 1, 2, C.grassLight);
+      }
+      cutDiamond(p);
+    },
+    { outline: false },
+  );
+}
 
-const DIRT_VARIANTS = 3;
+const water = pixelArt(
+  (p) => {
+    const rand = seededRandom(41);
+    p.rect(0, 0, p.w, p.h, C.water);
+    speckle(p, rand, C.waterDark, 16);
+    for (let i = 0; i < 4; i++) {
+      const x = 4 + Math.floor(rand() * (p.w - 10));
+      const y = 3 + Math.floor(rand() * (p.h - 6));
+      p.rect(x, y, 4, 1, C.waterLight);
+    }
+    cutDiamond(p);
+  },
+  { outline: false },
+);
 
-/** Ground tile index for a tile; anything that isn't concrete or road stands on dirt. */
+/** Ground tile art. Fences, trees and other upright things are drawn on top as objects. */
+export const TILESET: readonly Draw[] = [dirt(1), dirt(2), dirt(3), concrete, road, grass(51), grass(52), water];
+
+const VARIANTS = 3;
+
+/** Ground tile index for a tile. Trees and the booth stand on grass; other objects on dirt. */
 export function tilesetIndex(tile: TileId, x: number, y: number): number {
-  if (tile === Tile.Concrete) return 3;
-  if (tile === Tile.Road) return 4;
-  return ((Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0) % DIRT_VARIANTS;
+  const pick = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0;
+  switch (tile) {
+    case Tile.Concrete:
+      return 3;
+    case Tile.Road:
+      return 4;
+    case Tile.Grass:
+    case Tile.Tree:
+    case Tile.Booth:
+      return 5 + (pick % 2);
+    case Tile.Water:
+      return 7;
+    default:
+      return pick % VARIANTS;
+  }
 }

@@ -87,6 +87,25 @@ describe('SaveManager', () => {
   });
 });
 
+describe('real save migrations', () => {
+  it('upgrades an M0 (v1) save into a valid current game', async () => {
+    const { STATIONS, YARD } = await import('../src/data/layout');
+    const { parseGrid } = await import('../src/sim/grid');
+    const { isGameState, sanitizeState } = await import('../src/sim/state');
+    const store = memoryStorage();
+    store.setItem(SAVE_KEYS.main, JSON.stringify({ v: 1, savedAt: 0, state: { tick: 900, player: { x: 2.5, y: 14, facing: 'right' } } }));
+
+    const loaded = new SaveManager(store, isGameState).load();
+    expect(loaded).not.toBeNull();
+    const grid = parseGrid(YARD, STATIONS);
+    const state = sanitizeState(loaded!.state, grid, STATIONS);
+    expect(state.tick).toBe(900);
+    expect(state.player.stack).toEqual([]);
+    expect(Object.keys(state.processors)).toEqual(['shredder']);
+    expect(isGameState(state)).toBe(true);
+  });
+});
+
 describe('migrate', () => {
   it('chains migrations in order and throws on a gap', () => {
     const migrations = { 1: (s: unknown) => `${s}b`, 2: (s: unknown) => `${s}c` };

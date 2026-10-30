@@ -108,11 +108,32 @@ body {
   position: absolute;
   top: 8px;
   left: 8px;
-  margin: 0;
   padding: 6px 8px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.55);
   font: 12px/1.35 var(--mono);
+}
+
+.debug-overlay pre {
+  margin: 0;
+  font: inherit;
+}
+
+.debug-tools {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.debug-tools button {
+  pointer-events: auto;
+  font: inherit;
+  color: var(--text);
+  background: #2c4766;
+  border: 1px solid #4a6a90;
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
 }
 
 .boot-error {
@@ -124,4 +145,43 @@ body {
   padding: 24px;
   text-align: center;
   font-size: 18px;
+}
+
+/* HUD: navy chips from the art reference. */
+.hud {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.hud-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 96px;
+  padding: 5px 14px 5px 6px;
+  border-radius: 10px;
+  background: #13243a;
+  border: 2px solid #2c4766;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  color: #e8eef6;
+  font-weight: 700;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-coin {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #f5c542;
+  border: 2px solid #c99a1c;
+  color: #7a5a0c;
+  font-size: 14px;
+  font-weight: 900;
 }
