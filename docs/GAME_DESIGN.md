@@ -4,7 +4,7 @@ v0.2, 2026-10-30. All changes in §3 are approved. This is the source of truth f
 
 ## 1. Pitch
 
-A 2D recycling tycoon for CrazyGames, seen in a slightly angled ¾ top-down view. You start with a tiny scrapyard and do everything by hand: grab scrap from the delivery pile, feed the shredder, sort what comes out into bins, turn materials into products and sell them. Profits buy workers, conveyors and bigger machines until the yard runs itself, and your job becomes growing and tuning it.
+A 2D recycling tycoon for CrazyGames, seen in an isometric (diamond-grid) view. You start with a tiny scrapyard and do everything by hand: grab scrap from the delivery pile, feed the shredder, sort what comes out into bins, turn materials into products and sell them. Profits buy workers, conveyors and bigger machines until the yard runs itself, and your job becomes growing and tuning it.
 
 Genre: "idle arcade" tycoon, built for active play. Progress needs the player present and making decisions. Automation keeps the yard running while you play, plus a capped offline trickle.
 
@@ -32,7 +32,7 @@ Genre: "idle arcade" tycoon, built for active play. Progress needs the player pr
 | K | v1 content cap: 3 scrap types, 6 materials, 6 products, 2 machine tiers. Glass and vehicle scrap move to post-launch updates | Approved |
 | L | Buying happens on in-world cash pads (build/unlock) and machine terminals (upgrades) | Approved |
 | M | Rare salvage crates that only the player can carry, giving the character a late-game job | Approved |
-| N | ¾ view (slightly angled top-down, like Stardew Valley) instead of true top-down: flat tile ground, upright objects with front faces, depth-sorted | Approved |
+| N | Isometric view (2:1 diamond grid, as in the art reference) instead of true top-down. The simulation stays on a square grid; only the view projects it | Approved |
 
 ## 4. The yard
 
@@ -209,7 +209,7 @@ Each step is bought in this order:
 
 ### 7.13 Art direction
 
-- ¾ view: the ground is a flat tile grid; machines, bins, fences and characters stand upright with visible front faces and are depth-sorted by their base, so the worker can walk behind them. Not isometric.
+- Isometric view: diamond ground tiles; machines, bins, fences and characters show two side faces and are depth-sorted by how far down the screen they stand, so the worker can walk behind them. See [ART_DIRECTION.md](ART_DIRECTION.md).
 - Drawn in code: stylised, clean shapes, bold outlines, a warm industrial palette.
 - Each material has its own colour and its own icon shape, so it stays readable for colour-blind players. Proposed colours: iron blue-grey, aluminium silver, copper orange, plastic teal, components green, gold yellow.
 - Style details will be matched to the reference images (pending from the user).

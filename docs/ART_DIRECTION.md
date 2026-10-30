@@ -5,8 +5,9 @@ v0.1, 2026-10-30. Based on the user's reference, [art/reference-01.webp](art/ref
 ## Look
 
 - **Pixel art.** Chunky pixels with a 1-pixel dark outline around characters and props; bright, saturated colours; simple two- or three-tone shading.
-- **Camera: ¾ view,** like the reference's "Top Down View" and "Mobile Controls" panels. The ground is a flat grid; everything that stands up shows its front face and is depth-sorted. The reference's main yard picture is isometric; we take its objects and colours, not its angle.
-- **Scale.** Art is drawn at 32 art pixels per tile and shown with each art pixel as 2×2 render pixels (64 render px per tile). Characters are about 1¼ tiles tall.
+- **Camera: isometric,** like the reference's main yard picture. Ground tiles are 2:1 diamonds; upright objects show a lit left face and a shaded right face, and are depth-sorted.
+- **Scale.** A tile is a 32×16 art-pixel diamond, shown with each art pixel as 2×2 render pixels (64×32). Characters are 32×40 art pixels. Pixel diamonds step 2 across per 1 down, so edges stay clean.
+- **Facing.** Characters have a front pose (facing down-left) and a back pose (facing up-right), mirrored for the other two diagonals.
 - **Readability first.** Every material and machine is recognisable by shape *and* colour.
 
 ## Palette

@@ -10,10 +10,11 @@ export const SIM = {
 export const TICK_MS = 1000 / SIM.tickRate;
 
 export const VIEW = {
-  /** Size of one tile in render pixels. Art is drawn at this size. */
-  tilePx: 64,
-  /** The camera zooms so at least this many tiles are visible on any screen. */
-  minVisibleTiles: { w: 18, h: 10 },
+  /** Isometric tile diamond in render pixels (2:1). */
+  tileW: 64,
+  tileH: 32,
+  /** The camera zooms so at least this much of the world (render pixels) is visible on any screen. */
+  minVisiblePx: { w: 1152, h: 648 },
   /** Cap on devicePixelRatio, so low-end GPUs never get a huge canvas. */
   maxDpr: 2,
   /** How quickly the camera catches up with the player, per second. */

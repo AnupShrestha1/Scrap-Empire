@@ -4,16 +4,29 @@ import type { GameContext } from '../../context';
 import { Tile, tileAt, type Grid } from '../../sim/grid';
 import type { Facing } from '../../sim/state';
 import type { Vec2 } from '../../sim/vec';
+import { OBJECT_SIZE, type FenceDir } from '../art/objects';
 import { FEET_Y, PLAYER_SIZE } from '../art/player';
-import { tilesetIndex } from '../art/tiles';
+import { bakeGround } from '../ground';
+import { depthAt, isoProjection, screenDirToGrid, toScreen, type IsoProjection } from '../iso';
 import { FRAME, SCENE, TEX } from '../keys';
 
-/** Frame and mirroring per facing; the side frame faces left. */
+/**
+ * Frame and mirroring per facing. On screen, grid +x runs down-right and +y down-left;
+ * the front pose faces down-left and the back pose up-right.
+ */
 const FACING_FRAME: Readonly<Record<Facing, { frame: string; flip: boolean }>> = {
-  down: { frame: FRAME.playerDown, flip: false },
-  up: { frame: FRAME.playerUp, flip: false },
-  left: { frame: FRAME.playerSide, flip: false },
-  right: { frame: FRAME.playerSide, flip: true },
+  down: { frame: FRAME.playerFront, flip: false },
+  right: { frame: FRAME.playerFront, flip: true },
+  up: { frame: FRAME.playerBack, flip: false },
+  left: { frame: FRAME.playerBack, flip: true },
+};
+
+/** Grid offset to the neighbour in each fence direction. */
+const FENCE_NEIGHBOUR: Readonly<Record<FenceDir, readonly [number, number]>> = {
+  '+x': [1, 0],
+  '-x': [-1, 0],
+  '+y': [0, 1],
+  '-y': [0, -1],
 };
 
 /** Walking bob: height in render pixels and cycles per second. */
@@ -24,23 +37,16 @@ function smoothing(ratePerSecond: number, elapsedMs: number): number {
   return 1 - Math.exp((-ratePerSecond * elapsedMs) / 1000);
 }
 
-function groundRows(grid: Grid): number[][] {
-  const rows: number[][] = [];
-  for (let y = 0; y < grid.height; y++) {
-    const row: number[] = [];
-    for (let x = 0; x < grid.width; x++) row.push(tilesetIndex(tileAt(grid, x, y), x, y));
-    rows.push(row);
-  }
-  return rows;
-}
-
 /**
- * Draws the yard in a ¾ view from simulation state and feeds input into the simulation each frame.
- * Upright things are depth-sorted by the y of their base, so the worker passes behind crates and fences.
+ * Draws the yard isometrically from simulation state and feeds input into the simulation each frame.
+ * Upright things are depth-sorted by how far down the screen they stand.
  */
 export class WorldScene extends Phaser.Scene {
+  private proj!: IsoProjection;
   private player!: Phaser.GameObjects.Image;
-  private readonly move: Vec2 = { x: 0, y: 0 };
+  private readonly screenMove: Vec2 = { x: 0, y: 0 };
+  private readonly gridMove: Vec2 = { x: 0, y: 0 };
+  private readonly point: Vec2 = { x: 0, y: 0 };
   private lastFrameAt = 0;
   private walkTime = 0;
   private cameraX = 0;
@@ -52,19 +58,17 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     const { grid } = this.ctx.sim;
-    const T = VIEW.tilePx;
+    this.proj = isoProjection(grid.width, grid.height);
 
-    const map = this.make.tilemap({ data: groundRows(grid), tileWidth: T, tileHeight: T });
-    const tileset = map.addTilesetImage(TEX.ground, TEX.ground, T, T, 1, 2);
-    if (!tileset) throw new Error('Ground tileset is missing');
-    map.createLayer(0, tileset, 0, 0)?.setDepth(-1);
+    bakeGround(this.textures, TEX.ground, grid, this.proj);
+    this.add.image(0, 0, TEX.ground).setOrigin(0).setDepth(-1);
     this.placeObjects(grid);
 
-    this.player = this.add.image(0, 0, TEX.atlas, FRAME.playerDown).setOrigin(0.5, FEET_Y / PLAYER_SIZE.h);
+    this.player = this.add.image(0, 0, TEX.atlas, FRAME.playerFront).setOrigin(0.5, FEET_Y / PLAYER_SIZE.h);
     this.syncPlayer(0);
 
     const camera = this.cameras.main;
-    camera.setBounds(0, 0, grid.width * T, grid.height * T);
+    camera.setBounds(0, 0, this.proj.width, this.proj.height);
     this.cameraX = this.player.x;
     this.cameraY = this.player.y;
     camera.centerOn(this.cameraX, this.cameraY);
@@ -83,49 +87,59 @@ export class WorldScene extends Phaser.Scene {
     this.lastFrameAt = now;
 
     const { sim, input } = this.ctx;
-    input.readMove(this.move);
-    sim.setMoveInput(this.move.x, this.move.y);
+    input.readMove(this.screenMove);
+    screenDirToGrid(this.screenMove.x, this.screenMove.y, this.gridMove);
+    sim.setMoveInput(this.gridMove.x, this.gridMove.y);
     sim.advance(elapsed);
 
     this.syncPlayer(elapsed);
     this.followPlayer(elapsed);
   }
 
-  /** One upright sprite per fence or crate tile, standing on the bottom edge of its tile. */
+  /** Crates, and fences built from a post per tile plus half-runs towards each fenced neighbour. */
   private placeObjects(grid: Grid): void {
-    const T = VIEW.tilePx;
     const isFence = (x: number, y: number) =>
       x >= 0 && y >= 0 && x < grid.width && y < grid.height && tileAt(grid, x, y) === Tile.Fence;
 
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
         const tile = tileAt(grid, x, y);
-        let frame: string;
-        if (tile === Tile.Crate) frame = FRAME.crate;
-        else if (tile === Tile.Fence) {
-          const runsAcross = isFence(x - 1, y) || isFence(x + 1, y);
-          const runsDown = isFence(x, y - 1) || isFence(x, y + 1);
-          frame = runsDown && !runsAcross ? FRAME.fenceV : FRAME.fenceH;
-        } else continue;
-        this.add.image((x + 0.5) * T, (y + 1) * T, TEX.atlas, frame).setOrigin(0.5, 1).setDepth((y + 1) * T);
+        if (tile === Tile.Crate) {
+          this.addObject(FRAME.crate, x + 1, y + 1, OBJECT_SIZE.crate.originY, depthAt(x + 0.5, y + 0.5));
+        } else if (tile === Tile.Fence) {
+          const cx = x + 0.5;
+          const cy = y + 0.5;
+          this.addObject(FRAME.fencePost, cx, cy, OBJECT_SIZE.fencePost.originY, depthAt(cx, cy));
+          for (const [dir, [dx, dy]] of Object.entries(FENCE_NEIGHBOUR) as [FenceDir, readonly [number, number]][]) {
+            if (!isFence(x + dx, y + dy)) continue;
+            const depth = depthAt(cx + dx * 0.25, cy + dy * 0.25);
+            this.addObject(FRAME.fenceRun(dir), cx, cy, OBJECT_SIZE.fenceRun.originY, depth);
+          }
+        }
       }
     }
+  }
+
+  /** Places an atlas frame so its anchor sits on grid point (gx, gy). */
+  private addObject(frame: string, gx: number, gy: number, originY: number, depth: number): void {
+    const at = toScreen(this.proj, gx, gy, this.point);
+    this.add.image(at.x, at.y, TEX.atlas, frame).setOrigin(0.5, originY).setDepth(depth);
   }
 
   /** Places the sprite between the last two ticks, picks its facing frame and bobs it while walking. */
   private syncPlayer(elapsedMs: number): void {
     const { state, prevPlayer, alpha } = this.ctx.sim;
     const p = state.player;
-    const T = VIEW.tilePx;
-    const x = (prevPlayer.x + (p.x - prevPlayer.x) * alpha) * T;
-    const y = (prevPlayer.y + (p.y - prevPlayer.y) * alpha) * T;
+    const gx = prevPlayer.x + (p.x - prevPlayer.x) * alpha;
+    const gy = prevPlayer.y + (p.y - prevPlayer.y) * alpha;
+    const at = toScreen(this.proj, gx, gy, this.point);
 
     const walking = p.x !== prevPlayer.x || p.y !== prevPlayer.y;
     this.walkTime = walking ? this.walkTime + elapsedMs / 1000 : 0;
     const bob = Math.abs(Math.sin(this.walkTime * BOB.rate * Math.PI)) * BOB.height;
 
     const look = FACING_FRAME[p.facing];
-    this.player.setFrame(look.frame).setFlipX(look.flip).setPosition(x, y - bob).setDepth(y);
+    this.player.setFrame(look.frame).setFlipX(look.flip).setPosition(at.x, at.y - bob).setDepth(depthAt(gx, gy));
   }
 
   private followPlayer(elapsedMs: number): void {
@@ -135,11 +149,10 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.centerOn(this.cameraX, this.cameraY);
   }
 
-  /** Zooms so at least VIEW.minVisibleTiles are on screen, whatever the canvas size. */
+  /** Zooms so at least VIEW.minVisiblePx of the world is on screen, whatever the canvas size. */
   private fitCamera(): void {
     const { width, height } = this.scale;
-    const T = VIEW.tilePx;
-    const { w, h } = VIEW.minVisibleTiles;
-    this.cameras.main.setZoom(Math.min(width / (w * T), height / (h * T)));
+    const { w, h } = VIEW.minVisiblePx;
+    this.cameras.main.setZoom(Math.min(width / w, height / h));
   }
 }

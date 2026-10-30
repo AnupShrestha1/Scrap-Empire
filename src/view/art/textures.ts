@@ -51,43 +51,16 @@ export class AtlasBuilder {
   }
 }
 
-/**
- * Draws tiles in one row for a Phaser tileset (margin 1, spacing 2). Each tile's edge pixels are copied
- * one pixel outwards, which stops seams between tiles at fractional camera zoom.
- */
-export function buildTileset(
-  textures: Phaser.Textures.TextureManager,
-  key: string,
-  tilePx: number,
-  tiles: readonly Draw[],
-): void {
-  const stride = tilePx + 2;
+/** A canvas with `draw` already run on it. */
+export function drawToCanvas(w: number, h: number, draw: Draw): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = tiles.length * stride;
-  canvas.height = stride;
-  const ctx = get2d(canvas);
-
-  tiles.forEach((draw, i) => {
-    const x = i * stride + 1;
-    const y = 1;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.beginPath();
-    ctx.rect(0, 0, tilePx, tilePx);
-    ctx.clip();
-    draw(ctx, tilePx, tilePx);
-    ctx.restore();
-
-    ctx.drawImage(canvas, x, y, tilePx, 1, x, y - 1, tilePx, 1);
-    ctx.drawImage(canvas, x, y + tilePx - 1, tilePx, 1, x, y + tilePx, tilePx, 1);
-    ctx.drawImage(canvas, x, y - 1, 1, stride, x - 1, y - 1, 1, stride);
-    ctx.drawImage(canvas, x + tilePx - 1, y - 1, 1, stride, x + tilePx, y - 1, 1, stride);
-  });
-
-  if (!textures.addCanvas(key, canvas)) throw new Error(`Could not create texture '${key}'`);
+  canvas.width = w;
+  canvas.height = h;
+  draw(get2d(canvas), w, h);
+  return canvas;
 }
 
-function get2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+export function get2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D is not available');
   return ctx;

@@ -4,6 +4,8 @@ export const PALETTE = {
   background: '#1e1b24',
   outline: '#1e1b24',
   shadow: 'rgba(20, 14, 20, 0.3)',
+  /** Fills the screen around the diamond-shaped yard. */
+  grass: '#4f9a3e',
 
   dirt: '#b8855a',
   dirtDark: '#9a6a45',

@@ -1,78 +1,77 @@
-// Upright yard objects for the ¾ view. Each frame's bottom edge sits on the bottom of its tile,
-// and the art rises above the tile so things behind it are hidden. Coordinates are art pixels.
+// Upright yard objects for the isometric view. Coordinates are art pixels; a tile is a 32×16 diamond.
 import { PALETTE as C } from './palette';
 import { pixelArt, type Pixels } from './pixel';
 
-/** Frame sizes in render pixels. */
+/** Frame sizes in render pixels, and the anchor (0..1 of the frame) that sits on the ground point. */
 export const OBJECT_SIZE = {
-  crate: { w: 64, h: 88 },
-  fence: { w: 64, h: 72 },
+  /** Anchored at the tile's south (bottom) corner. */
+  crate: { w: 64, h: 64, originY: 30 / 32 },
+  /** Anchored at the tile centre. */
+  fencePost: { w: 16, h: 40, originY: 18 / 20 },
+  /** Anchored at the tile centre; each runs half a tile towards one neighbour. */
+  fenceRun: { w: 64, h: 56, originY: 22 / 28 },
 } as const;
 
-export const drawCrate = pixelArt((p) => {
-  const x = 3;
-  const w = p.w - 6;
-  const top = 12;
-  const front = 31;
-  const bottom = p.h - 2;
+const CRATE_HEIGHT = 14;
 
-  p.rect(x + 2, bottom, w, 2, C.shadow);
-  // Lid, with plank gaps.
-  p.rect(x, top, w, front - top, C.woodLight);
-  for (let y = top + 4; y < front - 1; y += 5) p.rect(x, y, w, 1, C.wood);
-  // Front face, darker, with a frame and a diagonal brace.
-  p.rect(x, front, w, bottom - front, C.wood);
-  p.rect(x, front, w, 1, C.woodDark);
-  p.rect(x + 1, front + 1, 2, bottom - front - 1, C.woodDark);
-  p.rect(x + w - 3, front + 1, 2, bottom - front - 1, C.woodDark);
-  p.rect(x + 1, bottom - 2, w - 2, 2, C.woodDark);
-  for (let i = 0; i < w - 6; i++) {
-    const y = front + 1 + Math.floor((i * (bottom - front - 3)) / (w - 6));
-    p.rect(x + 3 + i, y, 1, 2, C.woodDark);
+/** A wooden crate filling its tile: diamond lid, lit left face, shaded right face. */
+export const drawCrate = pixelArt((p) => {
+  const cx = p.w / 2;
+  // Side faces: each column runs down from the lid's lower edge.
+  for (let x = 0; x < p.w; x++) {
+    const edge = 8 + Math.floor((x < cx ? x : p.w - 1 - x) / 2);
+    const left = x < cx;
+    p.rect(x, edge, 1, CRATE_HEIGHT, left ? C.wood : C.woodDark);
+    if (x % 5 === 2) p.rect(x, edge + 1, 1, CRATE_HEIGHT - 2, left ? C.woodDark : C.outline);
+  }
+  // Lid: the tile diamond, with plank gaps.
+  for (let row = 0; row < 16; row++) {
+    const hw = row < 8 ? (row + 1) * 2 : (16 - row) * 2;
+    p.rect(cx - hw, row, hw * 2, 1, row % 4 === 3 ? C.wood : C.woodLight);
   }
 });
 
-function post(p: Pixels, x: number, top: number, bottom: number): void {
-  p.rect(x - 1, top - 1, 4, bottom - top + 2, C.outline);
-  p.rect(x, top, 2, bottom - top, C.fencePost);
-  p.px(x, top, C.fencePostLight);
-}
+export const drawFencePost = pixelArt((p) => {
+  p.rect(3, 2, 2, 16, C.fencePost);
+  p.px(3, 2, C.fencePostLight);
+});
 
-/** Chain-link diamonds inside a rectangle. */
-function mesh(p: Pixels, x0: number, y0: number, x1: number, y1: number): void {
-  for (let y = y0; y < y1; y++) {
-    for (let x = x0; x < x1; x++) {
-      if ((x + y) % 4 === 0 || (x - y + 64) % 4 === 0) p.px(x, y, C.fenceMesh);
+/** Grid direction a fence run heads in from its tile centre. */
+export type FenceDir = '+x' | '-x' | '+y' | '-y';
+
+/** Half a tile in art pixels along each grid direction: +x is down-right, +y is down-left. */
+const HALF_STEP: Readonly<Record<FenceDir, readonly [number, number]>> = {
+  '+x': [8, 4],
+  '-x': [-8, -4],
+  '+y': [-8, 4],
+  '-y': [8, -4],
+};
+
+/** Rails and chain-link mesh from the frame's anchor half a tile towards `dir`. */
+function fenceRun(p: Pixels, dir: FenceDir): void {
+  const ax = p.w / 2;
+  const ay = 22;
+  const [dx, dy] = HALF_STEP[dir];
+  const steps = Math.abs(dx);
+  for (let i = 0; i <= steps; i++) {
+    const x = ax + Math.sign(dx) * i;
+    const ground = ay + Math.round((dy * i) / steps);
+    for (let h = 4; h < 12; h++) {
+      if ((i + h) % 4 === 0 || (i - h + 64) % 4 === 0) p.px(x, ground - h, C.fenceMesh);
     }
+    p.px(x, ground - 3, C.fenceMesh);
+    p.px(x, ground - 12, C.fenceMesh);
+    p.px(x, ground - 13, C.fencePost);
   }
 }
 
-/** A fence panel running left–right, seen from the front. */
-export const drawFenceH = pixelArt(
-  (p) => {
-    const top = 6;
-    const base = p.h - 3;
-    p.rect(0, base, p.w, 3, C.shadow);
-    mesh(p, 0, top + 3, p.w, base - 2);
-    p.rect(0, top + 1, p.w, 2, C.fenceMesh);
-    p.rect(0, top + 3, p.w, 1, C.fencePost);
-    p.rect(0, base - 3, p.w, 1, C.fenceMesh);
-    post(p, 1, top, base);
-    post(p, p.w - 3, top, base);
-  },
-  { outline: false },
-);
+function fenceRunDraw(dir: FenceDir) {
+  return pixelArt((p) => fenceRun(p, dir), { outline: false });
+}
 
-/** A fence running up–down the screen: seen edge-on, a narrow strip with a post at the near end. */
-export const drawFenceV = pixelArt(
-  (p) => {
-    const cx = p.w / 2;
-    const base = p.h - 3;
-    p.rect(cx, p.h - 32, 4, 32, C.shadow);
-    mesh(p, cx - 2, 0, cx + 2, base - 4);
-    p.rect(cx - 2, 0, 1, base - 4, C.fenceMesh);
-    p.rect(cx + 1, 0, 1, base - 4, C.fenceMesh);
-    post(p, cx - 1, base - 26, base);
-  },
-  { outline: false },
-);
+export const FENCE_RUNS: Readonly<Record<FenceDir, ReturnType<typeof fenceRunDraw>>> = {
+  '+x': fenceRunDraw('+x'),
+  '-x': fenceRunDraw('-x'),
+  '+y': fenceRunDraw('+y'),
+  '-y': fenceRunDraw('-y'),
+};

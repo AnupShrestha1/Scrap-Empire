@@ -49,7 +49,7 @@ Why: DOM text stays sharp at 800×450 with no high-DPI scaling, where scaled can
 - Phaser's RESIZE scale mode fills the iframe.
 - The camera follows the player. Zoom is chosen so at least ~22×12 tiles are visible on any screen, so phones don't show too little and 1080p doesn't show too much.
 - All art is generated at boot from code into one texture atlas, at 2× resolution so it stays crisp when zoomed. One atlas also means few draw calls.
-- ¾ view: the ground is one tilemap layer; every upright object is a sprite whose depth is the y of its base, so nearer things draw over farther ones.
+- Isometric view (`src/view/iso.ts`): the simulation's square grid is projected to 2:1 diamonds. The whole ground is baked into one canvas texture at startup (one draw call; Phaser's isometric tilemaps only load Tiled files). Every upright object is a sprite whose depth is its grid x + y, so nearer things draw over farther ones. Input is read in screen directions and converted to grid directions, so "up" on the stick walks up the screen.
 - Phaser's WebGL renderer, with handling for lost and restored contexts (a Safari risk).
 
 **D8. Platform adapter.** One interface (the ad methods are added in M5):

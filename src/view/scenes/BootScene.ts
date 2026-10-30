@@ -1,28 +1,24 @@
 import Phaser from 'phaser';
-import { VIEW } from '../../config';
-import { drawCrate, drawFenceH, drawFenceV, OBJECT_SIZE } from '../art/objects';
-import { drawPlayerDown, drawPlayerSide, drawPlayerUp, PLAYER_SIZE } from '../art/player';
-import { AtlasBuilder, buildTileset } from '../art/textures';
-import { TILESET } from '../art/tiles';
+import { drawCrate, drawFencePost, FENCE_RUNS, OBJECT_SIZE, type FenceDir } from '../art/objects';
+import { drawPlayerBack, drawPlayerFront, PLAYER_SIZE } from '../art/player';
+import { AtlasBuilder } from '../art/textures';
 import { FRAME, SCENE, TEX } from '../keys';
 
-/** Draws all art in code at startup; nothing is downloaded. */
+/** Draws all sprite art in code at startup; nothing is downloaded. The ground is baked by WorldScene. */
 export class BootScene extends Phaser.Scene {
   constructor() {
     super(SCENE.boot);
   }
 
   create(): void {
-    buildTileset(this.textures, TEX.ground, VIEW.tilePx, TILESET);
-
-    const atlas = new AtlasBuilder(256);
-    const { w: pw, h: ph } = PLAYER_SIZE;
-    atlas.add(FRAME.playerDown, pw, ph, drawPlayerDown);
-    atlas.add(FRAME.playerUp, pw, ph, drawPlayerUp);
-    atlas.add(FRAME.playerSide, pw, ph, drawPlayerSide);
+    const atlas = new AtlasBuilder(512);
+    atlas.add(FRAME.playerFront, PLAYER_SIZE.w, PLAYER_SIZE.h, drawPlayerFront);
+    atlas.add(FRAME.playerBack, PLAYER_SIZE.w, PLAYER_SIZE.h, drawPlayerBack);
     atlas.add(FRAME.crate, OBJECT_SIZE.crate.w, OBJECT_SIZE.crate.h, drawCrate);
-    atlas.add(FRAME.fenceH, OBJECT_SIZE.fence.w, OBJECT_SIZE.fence.h, drawFenceH);
-    atlas.add(FRAME.fenceV, OBJECT_SIZE.fence.w, OBJECT_SIZE.fence.h, drawFenceV);
+    atlas.add(FRAME.fencePost, OBJECT_SIZE.fencePost.w, OBJECT_SIZE.fencePost.h, drawFencePost);
+    for (const [dir, draw] of Object.entries(FENCE_RUNS) as [FenceDir, (typeof FENCE_RUNS)[FenceDir]][]) {
+      atlas.add(FRAME.fenceRun(dir), OBJECT_SIZE.fenceRun.w, OBJECT_SIZE.fenceRun.h, draw);
+    }
     atlas.commit(this.textures, TEX.atlas);
 
     this.scene.start(SCENE.world);

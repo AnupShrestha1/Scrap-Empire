@@ -1,5 +1,6 @@
 // The worker, in the reference's style: blue cap, red shirt, jeans. Coordinates are art pixels
-// in a 32×40 frame, with the feet at row 37.
+// in a 32×40 frame, with the feet at row 37. Isometric: the front pose faces down-left (mirrored for
+// down-right), the back pose faces up-right (mirrored for up-left).
 import { PALETTE as C } from './palette';
 import { ART_SCALE, pixelArt, type Pixels } from './pixel';
 
@@ -13,73 +14,57 @@ function shadow(p: Pixels): void {
 
 function legs(p: Pixels): void {
   p.rect(12, 30, 3, 6, C.jeans);
-  p.rect(17, 30, 3, 6, C.jeans);
-  p.rect(14, 30, 1, 6, C.jeansDark);
-  p.rect(12, 35, 3, 2, C.boots);
+  p.rect(17, 30, 3, 6, C.jeansDark);
+  p.rect(11, 35, 4, 2, C.boots);
   p.rect(17, 35, 3, 2, C.boots);
 }
 
-function torso(p: Pixels, x: number, w: number): void {
-  p.rect(x, 21, w, 10, C.shirt);
-  p.rect(x + w - 1, 21, 1, 10, C.shirtDark);
-  p.rect(x, 30, w, 1, C.shirtDark);
+function torso(p: Pixels): void {
+  p.rect(11, 21, 10, 10, C.shirt);
+  p.rect(18, 21, 3, 10, C.shirtDark);
+  p.rect(11, 30, 10, 1, C.shirtDark);
 }
 
-function arm(p: Pixels, x: number): void {
-  p.rect(x, 22, 2, 6, C.shirt);
+function arm(p: Pixels, x: number, shade: string): void {
+  p.rect(x, 22, 2, 6, shade);
   p.rect(x, 28, 2, 2, C.skin);
 }
 
-function head(p: Pixels, cx: number): void {
-  p.ellipse(cx, 15.5, 5, 5.5, C.skin);
-  p.rect(cx + 3, 13, 1, 6, C.skinDark);
+function head(p: Pixels): void {
+  p.ellipse(16, 15.5, 5, 5.5, C.skin);
+  p.rect(19, 13, 1, 6, C.skinDark);
 }
 
-/** Cap crown, plus a brim of `brimW` pixels starting at `brimX`. */
-function cap(p: Pixels, brimX: number, brimW: number): void {
+function cap(p: Pixels): void {
   p.rect(11, 9, 10, 4, C.cap);
   p.rect(12, 8, 8, 1, C.cap);
   p.rect(13, 9, 3, 1, '#5b93e6');
-  p.rect(brimX, 13, brimW, 1, C.capDark);
 }
 
-/** Facing the camera. */
-export const drawPlayerDown = pixelArt((p) => {
+/** Facing down-left (towards the camera). */
+export const drawPlayerFront = pixelArt((p) => {
   shadow(p);
   legs(p);
-  arm(p, 9);
-  arm(p, 21);
-  torso(p, 11, 10);
-  head(p, 16);
-  cap(p, 11, 10);
-  p.px(14, 16, C.outline);
-  p.px(18, 16, C.outline);
-  p.rect(15, 19, 2, 1, C.skinDark);
-});
-
-/** Facing away from the camera. */
-export const drawPlayerUp = pixelArt((p) => {
-  shadow(p);
-  legs(p);
-  arm(p, 9);
-  arm(p, 21);
-  torso(p, 11, 10);
-  head(p, 16);
-  p.rect(11, 13, 10, 5, C.hair);
-  cap(p, 12, 8);
-});
-
-/** Facing left; mirrored for right. */
-export const drawPlayerSide = pixelArt((p) => {
-  shadow(p);
-  p.rect(13, 30, 3, 6, C.jeansDark);
-  p.rect(16, 30, 3, 6, C.jeans);
-  p.rect(12, 35, 4, 2, C.boots);
-  p.rect(16, 35, 3, 2, C.boots);
-  torso(p, 12, 8);
-  arm(p, 14);
-  head(p, 16);
-  p.rect(18, 12, 3, 6, C.hair);
-  cap(p, 7, 6);
+  arm(p, 21, C.shirtDark);
+  torso(p);
+  arm(p, 9, C.shirt);
+  head(p);
+  cap(p);
+  p.rect(8, 13, 9, 1, C.capDark);
   p.px(13, 16, C.outline);
+  p.px(16, 16, C.outline);
+  p.rect(13, 19, 2, 1, C.skinDark);
+});
+
+/** Facing up-right (away from the camera). */
+export const drawPlayerBack = pixelArt((p) => {
+  shadow(p);
+  legs(p);
+  arm(p, 9, C.shirtDark);
+  torso(p);
+  arm(p, 21, C.shirt);
+  head(p);
+  p.rect(11, 13, 10, 5, C.hair);
+  cap(p);
+  p.rect(17, 12, 6, 1, C.capDark);
 });

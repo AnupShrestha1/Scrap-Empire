@@ -4,12 +4,11 @@ export const TEX = {
 } as const;
 
 export const FRAME = {
-  playerDown: 'player-down',
-  playerUp: 'player-up',
-  playerSide: 'player-side',
+  playerFront: 'player-front',
+  playerBack: 'player-back',
   crate: 'crate',
-  fenceH: 'fence-h',
-  fenceV: 'fence-v',
+  fencePost: 'fence-post',
+  fenceRun: (dir: string) => `fence-${dir}`,
 } as const;
 
 export const SCENE = {

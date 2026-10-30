@@ -20,6 +20,10 @@ export class Pixels {
     this.ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
   }
 
+  clear(x: number, y: number, w: number, h: number): void {
+    this.ctx.clearRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+  }
+
   px(x: number, y: number, color: string): void {
     this.rect(x, y, 1, 1, color);
   }

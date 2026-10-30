@@ -21,7 +21,7 @@ export function createGame(parent: HTMLElement, ctx: GameContext): Phaser.Game {
     parent,
     width,
     height,
-    backgroundColor: PALETTE.background,
+    backgroundColor: PALETTE.grass,
     // We size the canvas ourselves (see canvasSize) to render sharply on high-DPI phones.
     scale: { mode: Phaser.Scale.NONE },
     // Pixel art: nearest-neighbour texture filtering and whole-pixel sprite positions.
