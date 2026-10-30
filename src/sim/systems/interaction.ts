@@ -1,10 +1,11 @@
 import { CARRY, PRICES, SELL_PER_S } from '../../data/balance';
 import { ITEM_IDS } from '../../data/items';
+import { PURCHASE, UPGRADES, upgradeCost } from '../../data/upgrades';
 import { SIM } from '../../config';
+import { binCapacity, carryCapacity } from '../effective';
 import { PLAYER_PLACE, type SimEvent } from '../events';
-import type { GameState } from '../state';
-import { zoneAt, type ZoneHit } from '../stations';
-import type { StationDef } from '../stations';
+import { secondsToTicks, type GameState } from '../state';
+import { zoneAt, type CashPadDef, type StationDef, type ZoneHit } from '../stations';
 
 /** Transient interaction bookkeeping; not saved. */
 export interface InteractionState {
@@ -12,17 +13,19 @@ export interface InteractionState {
   zoneKey: string | null;
   /** Transfers owed; one item moves each time this reaches 1. */
   budget: number;
-  /** Whether "storage full" was already reported for this visit to the zone. */
+  /** Ticks spent in the current zone (cash pads wait before taking money). */
+  dwell: number;
+  /** Whether a warning was already reported for this visit to the zone. */
   warned: boolean;
 }
 
 export function newInteractionState(): InteractionState {
-  return { zoneKey: null, budget: 0, warned: false };
+  return { zoneKey: null, budget: 0, dwell: 0, warned: false };
 }
 
 /**
- * Moves items between the player and whatever zone they stand in, at CARRY.transferPerS.
- * The first item moves the moment the player steps in. Returns true if anything moved.
+ * Moves items between the player and whatever zone they stand in, or takes payment on a cash pad.
+ * Item transfers start the moment the player steps in. Returns true if anything changed.
  */
 export function stepInteraction(
   state: GameState,
@@ -36,20 +39,57 @@ export function stepInteraction(
   if (key !== inter.zoneKey) {
     inter.zoneKey = key;
     inter.budget = 1;
+    inter.dwell = 0;
     inter.warned = false;
   } else if (hit) {
     const rate = hit.zone === 'sell' ? SELL_PER_S : CARRY.transferPerS;
     inter.budget = Math.min(1, inter.budget + rate / SIM.tickRate);
+    inter.dwell++;
   }
-  if (!hit || inter.budget < 1) return false;
+  if (!hit) return false;
+  if (hit.zone === 'buy') return stepPurchase(state, hit.station, inter, events);
+  if (inter.budget < 1) return false;
   if (!transferOne(state, hit, inter, events)) return false;
   inter.budget -= 1;
   return true;
 }
 
-function transferOne(state: GameState, hit: ZoneHit, inter: InteractionState, events: SimEvent[]): boolean {
+/** Pays towards the pad's upgrade, a slice per tick, after a short wait. Partial payment is kept. */
+function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState, events: SimEvent[]): boolean {
+  const id = pad.upgrade;
+  const level = state.upgrades[id];
+  if (level >= UPGRADES[id].maxLevel) return false;
+  if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return false;
+
+  const cost = upgradeCost(id, level);
+  const owed = cost - state.upgradePaid[id];
+  if (state.money === 0) {
+    if (!inter.warned) events.push({ type: 'needCash', upgrade: id, amount: owed });
+    inter.warned = true;
+    return false;
+  }
+  const slice = Math.max(1, Math.ceil(cost / secondsToTicks(PURCHASE.payS)));
+  const pay = Math.min(slice, owed, state.money);
+  state.money -= pay;
+  state.upgradePaid[id] += pay;
+  if (state.upgradePaid[id] >= cost) {
+    state.upgrades[id] = level + 1;
+    state.upgradePaid[id] = 0;
+    events.push({ type: 'upgraded', upgrade: id, level: level + 1 });
+    // Staying on the pad buys the next level, after a breath.
+    inter.dwell = secondsToTicks(PURCHASE.delayS) - secondsToTicks(PURCHASE.nextLevelPauseS);
+  }
+  return true;
+}
+
+function transferOne(
+  state: GameState,
+  hit: Exclude<ZoneHit, { zone: 'buy' }>,
+  inter: InteractionState,
+  events: SimEvent[],
+): boolean {
   const stack = state.player.stack;
-  const room = stack.length < CARRY.capacity;
+  const room = stack.length < carryCapacity(state);
   const id = hit.station.id;
 
   switch (hit.zone) {
@@ -101,6 +141,7 @@ function transferOne(state: GameState, hit: ZoneHit, inter: InteractionState, ev
       const value = PRICES[item];
       bin.count--;
       state.money += value;
+      state.earned += value;
       events.push({ type: 'sold', station: id, item, value });
       return true;
     }
@@ -110,7 +151,7 @@ function transferOne(state: GameState, hit: ZoneHit, inter: InteractionState, ev
       const item = hit.station.item;
       const index = stack.lastIndexOf(item);
       if (index < 0) return false;
-      if (bin.count >= hit.station.capacity) {
+      if (bin.count >= binCapacity(hit.station, state)) {
         if (!inter.warned) events.push({ type: 'storageFull', station: id, item });
         inter.warned = true;
         return false;

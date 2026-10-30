@@ -1,5 +1,5 @@
 import { ITEM_IDS } from '../../data/items';
-import type { ProcessorStatus } from '../events';
+import type { ProcessorStatus, SimEvent } from '../events';
 import { secondsToTicks, type ProcessorState } from '../state';
 import type { ProcessorDef } from '../stations';
 
@@ -9,7 +9,8 @@ export function trayTotal(state: ProcessorState): number {
   return total;
 }
 
-export function cycleTicks(def: ProcessorDef): number {
+/** Cycle length before upgrades; see effective.ts for the upgraded value. */
+export function baseCycleTicks(def: ProcessorDef): number {
   return secondsToTicks(def.recipe.cycleS);
 }
 
@@ -18,8 +19,12 @@ export function cycleTicks(def: ProcessorDef): number {
  * outputs to the tray. If the tray can't take them the machine waits, finished, until it can.
  * Returns true if anything changed.
  */
-export function stepProcessor(def: ProcessorDef, state: ProcessorState): boolean {
-  const cycle = cycleTicks(def);
+export function stepProcessor(
+  def: ProcessorDef,
+  state: ProcessorState,
+  cycle = baseCycleTicks(def),
+  events: SimEvent[] = [],
+): boolean {
   if (state.progress === 0) {
     if (state.hopper === 0) return false;
     state.hopper--;
@@ -49,11 +54,12 @@ export function stepProcessor(def: ProcessorDef, state: ProcessorState): boolean
     state.carry[id] = Math.max(0, state.carry[id] + amount - n);
   }
   state.progress = 0;
+  events.push({ type: 'processed', station: def.id, item: def.recipe.input });
   return true;
 }
 
-export function processorStatus(def: ProcessorDef, state: ProcessorState): ProcessorStatus {
-  if (state.progress >= cycleTicks(def)) return 'blocked';
+export function processorStatus(def: ProcessorDef, state: ProcessorState, cycle = baseCycleTicks(def)): ProcessorStatus {
+  if (state.progress >= cycle) return 'blocked';
   if (state.progress > 0) return 'processing';
   if (trayTotal(state) > 0) return 'ready';
   return 'idle';

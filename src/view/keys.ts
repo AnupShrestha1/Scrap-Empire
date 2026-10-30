@@ -22,6 +22,7 @@ export const FRAME = {
   truck: (loaded: boolean) => (loaded ? 'truck-loaded' : 'truck-empty'),
   item: (item: ItemId) => `item-${item}`,
   pad: (station: string, zone: string) => `pad-${station}-${zone}`,
+  arrow: 'hint-arrow',
 } as const;
 
 export const SCENE = {

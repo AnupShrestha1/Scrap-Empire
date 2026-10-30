@@ -230,12 +230,13 @@ export function drawItem(item: ItemId) {
 
 // ---------- Interaction pads (where the player stands) ----------
 
-export type PadKind = 'pickup' | 'dropoff' | 'sell';
+export type PadKind = 'pickup' | 'dropoff' | 'sell' | 'buy';
 
 const PAD_COLOUR: Record<PadKind, { edge: string; fill: string }> = {
   pickup: { edge: C.lampGreen, fill: 'rgba(92, 200, 74, 0.22)' },
   dropoff: { edge: '#ff9a3c', fill: 'rgba(255, 154, 60, 0.22)' },
   sell: { edge: C.lampYellow, fill: 'rgba(245, 197, 66, 0.3)' },
+  buy: { edge: C.truckBlueLight, fill: 'rgba(79, 143, 230, 0.3)' },
 };
 
 export function padFrame(a: number, b: number) {
@@ -253,6 +254,14 @@ export function drawPad(a: number, b: number, kind: PadKind) {
       p.polygon(outer, PAD_COLOUR[kind].edge);
       p.cutPolygon(inner);
       p.polygon(inner, PAD_COLOUR[kind].fill);
+      if (kind === 'buy') {
+        // An upward chevron: "upgrade".
+        const [cx, cy] = along(g, a / 2, b / 2);
+        for (let i = 0; i < 4; i++) {
+          p.rect(cx - 4 + i, cy - 1 - i, 2, 2, C.truckBlueLight);
+          p.rect(cx + 3 - i, cy - 1 - i, 2, 2, C.truckBlueLight);
+        }
+      }
       if (kind === 'sell') {
         // A gold coin in the middle of the pad.
         const [cx, cy] = along(g, a / 2, b / 2);
@@ -264,3 +273,14 @@ export function drawPad(a: number, b: number, kind: PadKind) {
     { outline: false },
   );
 }
+
+// ---------- Hint arrow ----------
+
+export const ARROW_FRAME = { w: 32, h: 40 } as const;
+
+/** A bold downward arrow that bobs above the next objective's spot. */
+export const drawArrow = pixelArt((p) => {
+  p.rect(5, 1, 6, 9, C.lampYellow);
+  p.polygon([[1, 10], [15, 10], [8, 18]], C.lampYellow);
+  p.rect(6, 2, 2, 7, '#fff3b0');
+});

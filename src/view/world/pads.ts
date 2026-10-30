@@ -29,8 +29,11 @@ export function padsFor(stations: readonly StationDef[]): PadSpec[] {
     } else if (s.kind === 'processor') {
       pads.push({ station: s.id, zone: 'input', rect: s.zones.input, kind: 'dropoff' });
       pads.push({ station: s.id, zone: 'output', rect: s.zones.output, kind: 'pickup' });
-    } else {
+    } else if (s.kind === 'bin') {
       pads.push({ station: s.id, zone: 'sell', rect: s.zones.sell, kind: 'sell', label: t('pad.sell') });
+    } else {
+      // Cash pads label themselves with the live price (see CashPadView).
+      pads.push({ station: s.id, zone: 'buy', rect: s.zones.buy, kind: 'buy' });
     }
   }
   return pads;

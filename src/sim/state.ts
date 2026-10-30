@@ -2,6 +2,7 @@ import { PILE, SUPPLIER } from '../data/balance';
 import { emptyItemCounts, isItemId, ITEM_IDS, type ItemId } from '../data/items';
 import { PLAYER } from '../data/player';
 import { SIM } from '../config';
+import { emptyUpgradeCounts, UPGRADE_IDS, type UpgradeId } from '../data/upgrades';
 import { boxHitsSolid, type Grid } from './grid';
 import type { StationDef } from './stations';
 
@@ -53,6 +54,14 @@ export interface GameState {
   tick: number;
   /** Whole dollars. */
   money: number;
+  /** All cash ever earned (sales and rewards); will drive business level. */
+  earned: number;
+  /** Bought level of each upgrade. */
+  upgrades: Record<UpgradeId, number>;
+  /** Cash already paid towards each upgrade's next level. */
+  upgradePaid: Record<UpgradeId, number>;
+  /** Position in the objective chain, and progress on the current objective. */
+  objectives: { index: number; progress: number };
   player: PlayerState;
   truck: TruckState;
   piles: Record<string, PileState>;
@@ -72,6 +81,10 @@ export function createNewGame(grid: Grid, stations: readonly StationDef[]): Game
   const state: GameState = {
     tick: 0,
     money: 0,
+    earned: 0,
+    upgrades: emptyUpgradeCounts(),
+    upgradePaid: emptyUpgradeCounts(),
+    objectives: { index: 0, progress: 0 },
     player: { x: grid.playerStart.x, y: grid.playerStart.y, facing: 'down', stack: [] },
     truck: { phase: 'away', timer: secondsToTicks(SUPPLIER.firstDeliveryS), load: 0 },
     piles: {},
@@ -87,6 +100,12 @@ export function isGameState(value: unknown): value is GameState {
   return (
     isCount(tick) &&
     isCount(value.money) &&
+    isCount(value.earned) &&
+    isUpgradeCounts(value.upgrades) &&
+    isUpgradeCounts(value.upgradePaid) &&
+    isRecord(value.objectives) &&
+    isCount(value.objectives.index) &&
+    isCount(value.objectives.progress) &&
     Number.isFinite(player.x) &&
     Number.isFinite(player.y) &&
     FACINGS.includes(player.facing as string) &&
@@ -123,7 +142,10 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
         processors[s.id] = state.processors[s.id] ?? newProcessorState();
         break;
       case 'bin':
-        bins[s.id] = { count: Math.min(state.bins[s.id]?.count ?? 0, s.capacity) };
+        // Upgrades can raise capacity, so only drop negative or broken counts here.
+        bins[s.id] = { count: state.bins[s.id]?.count ?? 0 };
+        break;
+      case 'cashPad':
         break;
     }
   }
@@ -150,6 +172,10 @@ function isCount(value: unknown): boolean {
 
 function isMapOf(value: unknown, check: (entry: Record<string, unknown>) => boolean): boolean {
   return isRecord(value) && Object.values(value).every((v) => isRecord(v) && check(v));
+}
+
+function isUpgradeCounts(value: unknown): boolean {
+  return isRecord(value) && UPGRADE_IDS.every((id) => isCount(value[id]));
 }
 
 function isItemCounts(value: unknown, fractional = false): boolean {

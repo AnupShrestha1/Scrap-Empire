@@ -181,7 +181,7 @@ describe('supplier truck', () => {
     state.piles.pile!.items = 0;
     const events: SimEvent[] = [];
     const ticks = secondsToTicks(SUPPLIER.firstDeliveryS + SUPPLIER.driveInS + SUPPLIER.load / SUPPLIER.unloadPerS + 1);
-    for (let i = 0; i < ticks; i++) stepSupplier(state.truck, pileDef, state.piles.pile!, events);
+    for (let i = 0; i < ticks; i++) stepSupplier(state, pileDef, events);
     expect(state.piles.pile!.items).toBe(SUPPLIER.load);
     expect(state.truck.phase).toBe('leaving');
     expect(events.map((e) => e.type)).toContain('truckArriving');
@@ -191,11 +191,11 @@ describe('supplier truck', () => {
     const state = createNewGame(grid, STATIONS);
     state.piles.pile!.items = pileDef.capacity - 2;
     const events: SimEvent[] = [];
-    for (let i = 0; i < secondsToTicks(20); i++) stepSupplier(state.truck, pileDef, state.piles.pile!, events);
+    for (let i = 0; i < secondsToTicks(20); i++) stepSupplier(state, pileDef, events);
     expect(state.truck.phase).toBe('waiting');
     expect(state.truck.load).toBe(SUPPLIER.load - 2);
     state.piles.pile!.items = 0;
-    for (let i = 0; i < secondsToTicks(5); i++) stepSupplier(state.truck, pileDef, state.piles.pile!, events);
+    for (let i = 0; i < secondsToTicks(5); i++) stepSupplier(state, pileDef, events);
     expect(state.truck.phase).not.toBe('waiting');
     expect(state.piles.pile!.items).toBe(SUPPLIER.load - 2);
   });

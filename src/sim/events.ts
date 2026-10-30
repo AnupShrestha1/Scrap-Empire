@@ -1,4 +1,5 @@
 import type { ItemId } from '../data/items';
+import type { UpgradeId } from '../data/upgrades';
 
 export type ProcessorStatus = 'idle' | 'processing' | 'ready' | 'blocked';
 
@@ -13,6 +14,10 @@ export type SimEvent =
   | { type: 'processorStatus'; station: string; status: ProcessorStatus }
   | { type: 'storageFull'; station: string; item: ItemId }
   | { type: 'sold'; station: string; item: ItemId; value: number }
+  | { type: 'processed'; station: string; item: ItemId }
+  | { type: 'upgraded'; upgrade: UpgradeId; level: number }
+  | { type: 'needCash'; upgrade: UpgradeId; amount: number }
+  | { type: 'objectiveDone'; objective: string; reward: number }
   | { type: 'truckArriving' }
   | { type: 'truckWaiting' }
   | { type: 'truckLeaving' };

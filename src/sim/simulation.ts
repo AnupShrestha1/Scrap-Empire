@@ -5,6 +5,8 @@ import type { GameState } from './state';
 import type { PileDef, ProcessorDef, StationDef } from './stations';
 import { newInteractionState, stepInteraction, type InteractionState } from './systems/interaction';
 import { stepPlayer } from './systems/player';
+import { processorCycleTicks } from './effective';
+import { stepObjectives } from './systems/objectives';
 import { processorStatus, stepProcessor } from './systems/processing';
 import { stepSupplier } from './systems/supplier';
 import type { Vec2 } from './vec';
@@ -43,7 +45,9 @@ export class Simulation {
     if (!pile) throw new Error(`Truck route needs pile '${truckPileId}'`);
     this.truckPile = pile;
     this.processorDefs = stations.filter((s): s is ProcessorDef => s.kind === 'processor');
-    for (const def of this.processorDefs) this.statuses.set(def.id, processorStatus(def, state.processors[def.id]!));
+    for (const def of this.processorDefs) {
+      this.statuses.set(def.id, processorStatus(def, state.processors[def.id]!, processorCycleTicks(def, state)));
+    }
   }
 
   /** Sets the movement input (grid direction, length 0..1) that the following ticks use. */
@@ -81,21 +85,25 @@ export class Simulation {
 
   private step(): void {
     const { state, events } = this;
+    const firstEvent = events.length;
     const p = state.player;
     this.prevPlayer.x = p.x;
     this.prevPlayer.y = p.y;
     let changed = stepPlayer(p, this.move, this.grid, TICK_MS / 1000);
     changed = stepInteraction(state, this.stations, this.interaction, events) || changed;
-    changed = stepSupplier(state.truck, this.truckPile, state.piles[this.truckPile.id]!, events) || changed;
+    changed = stepSupplier(state, this.truckPile, events) || changed;
     for (const def of this.processorDefs) {
       const machine = state.processors[def.id]!;
-      changed = stepProcessor(def, machine) || changed;
-      const status = processorStatus(def, machine);
+      const cycle = processorCycleTicks(def, state);
+      changed = stepProcessor(def, machine, cycle, events) || changed;
+      const status = processorStatus(def, machine, cycle);
       if (status !== this.statuses.get(def.id)) {
         this.statuses.set(def.id, status);
         events.push({ type: 'processorStatus', station: def.id, status });
       }
     }
+    // Objectives look at this tick's events only (earlier ones may not have been drained yet).
+    changed = stepObjectives(state, events.slice(firstEvent), events) || changed;
     if (changed) this.dirty = true;
     state.tick++;
   }

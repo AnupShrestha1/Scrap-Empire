@@ -1,4 +1,5 @@
 import type { ItemId } from '../data/items';
+import type { UpgradeId } from '../data/upgrades';
 import { en } from './en';
 
 export type StringKey = keyof typeof en;
@@ -7,6 +8,11 @@ export type StringParams = Readonly<Record<string, string | number>>;
 /** Looks up a UI string and fills its `{name}` placeholders. */
 export function t(key: StringKey, params?: StringParams): string {
   return format(en[key], params);
+}
+
+/** Display name of an upgrade. */
+export function upgradeName(id: UpgradeId): string {
+  return t(`upgradeName.${id}` as StringKey);
 }
 
 /** Display name of an item. */

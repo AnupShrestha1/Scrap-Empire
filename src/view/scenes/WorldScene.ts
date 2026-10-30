@@ -11,7 +11,8 @@ import { FRAME, SCENE, TEX } from '../keys';
 import { placeDecor } from '../world/decor';
 import { Labels } from '../world/labels';
 import { placePads } from '../world/pads';
-import { CarriedStackView, createStationViews, type StationViews } from '../world/stationViews';
+import { CarriedStackView, createStationViews, HintArrowView, type StationViews } from '../world/stationViews';
+import { itemName, t, upgradeName } from '../../i18n';
 
 /**
  * Frame and mirroring per facing. On screen, grid +x runs down-right and +y down-left;
@@ -42,6 +43,7 @@ export class WorldScene extends Phaser.Scene {
   private labels!: Labels;
   private stations!: StationViews;
   private carried!: CarriedStackView;
+  private hint!: HintArrowView;
   private readonly simEvents: SimEvent[] = [];
   /** Cash earned per station this frame, shown as one floating "+$" each. */
   private readonly sales = new Map<string, number>();
@@ -70,6 +72,7 @@ export class WorldScene extends Phaser.Scene {
     this.stations = createStationViews(this, this.proj, this.labels, stations);
     this.player = this.add.image(0, 0, TEX.atlas, FRAME.playerFront).setOrigin(0.5, FEET_Y / PLAYER_SIZE.h);
     this.carried = new CarriedStackView(this, this.labels);
+    this.hint = new HintArrowView(this, this.proj, stations);
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, this.proj.width, this.proj.height);
@@ -98,13 +101,11 @@ export class WorldScene extends Phaser.Scene {
     sim.advance(elapsed);
 
     this.sales.clear();
-    for (const event of sim.drainEvents(this.simEvents)) {
-      if (event.type === 'storageFull') this.stations.bins.get(event.station)?.flash(time);
-      if (event.type === 'sold') this.sales.set(event.station, (this.sales.get(event.station) ?? 0) + event.value);
-    }
+    for (const event of sim.drainEvents(this.simEvents)) this.react(event, time);
     for (const [station, value] of this.sales) this.showSale(station, value);
     this.ctx.hud.update(sim.state);
     this.render(elapsed, time);
+    this.hint.update(sim, time, this.ctx.settings.value.hints);
     this.followPlayer(elapsed);
   }
 
@@ -125,6 +126,49 @@ export class WorldScene extends Phaser.Scene {
     this.carried.update(sim, at.x, at.y - bob, depth);
 
     for (const view of this.stations.views) view.update(sim, timeMs);
+  }
+
+  /** Turns simulation events into feedback: sounds, toasts, flashes and floating cash. */
+  private react(event: SimEvent, timeMs: number): void {
+    const { sfx, toasts } = this.ctx;
+    switch (event.type) {
+      case 'itemMoved':
+        if (event.to === 'player') sfx.play('pickup');
+        else if (event.from === 'player') sfx.play('drop');
+        break;
+      case 'processed':
+        sfx.play('chunk');
+        break;
+      case 'storageFull':
+        this.stations.bins.get(event.station)?.flash(timeMs);
+        toasts.show(t('toast.storageFull', { item: itemName(event.item) }), 'warn');
+        sfx.play('warn');
+        break;
+      case 'sold':
+        this.sales.set(event.station, (this.sales.get(event.station) ?? 0) + event.value);
+        sfx.play('cash');
+        break;
+      case 'needCash':
+        toasts.show(t('toast.needCash', { amount: event.amount }), 'warn');
+        sfx.play('warn');
+        break;
+      case 'upgraded':
+        toasts.show(t('toast.upgraded', { name: upgradeName(event.upgrade), level: event.level }), 'good');
+        sfx.play('upgrade');
+        break;
+      case 'objectiveDone':
+        toasts.show(t('toast.objectiveDone', { reward: event.reward }), 'good');
+        sfx.play('objective');
+        break;
+      case 'truckArriving':
+        sfx.play('horn');
+        break;
+      case 'truckWaiting':
+        toasts.show(t('toast.yardFull'), 'warn');
+        break;
+      default:
+        break;
+    }
   }
 
   private showSale(station: string, value: number): void {

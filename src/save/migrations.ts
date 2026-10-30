@@ -1,5 +1,5 @@
 /** Current save format. Bump it, and add a migration, whenever GameState changes shape. */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export type Migration = (state: unknown) => unknown;
 
@@ -26,6 +26,12 @@ export const MIGRATIONS: Migrations = {
   },
   /** v2 (M1a) → v3: cash, for selling from bins. */
   2: (state) => ({ ...(state as Json), money: 0 }),
+  /** v3 → v4 (M1b): upgrades, objectives and lifetime earnings. */
+  3: (state) => {
+    const s = state as Json;
+    const zero = { carry: 0, shredderSpeed: 0, binSize: 0, supply: 0 };
+    return { ...s, earned: s.money, upgrades: { ...zero }, upgradePaid: { ...zero }, objectives: { index: 0, progress: 0 } };
+  },
 };
 
 /** Runs every migration from `from` up to `to`. Throws if one is missing. */

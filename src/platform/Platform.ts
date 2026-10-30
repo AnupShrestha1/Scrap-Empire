@@ -20,4 +20,6 @@ export interface Platform {
   gameplayStart(): void;
   /** Call at every break in play (menu, pause). Not for tab switches; the portal handles those. */
   gameplayStop(): void;
+  /** True when the portal wants the game silent, whatever the in-game sound setting says. */
+  audioMuted(): boolean;
 }

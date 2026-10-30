@@ -11,6 +11,9 @@ export class LocalPlatform implements Platform {
   loadingStop(): void {}
   gameplayStart(): void {}
   gameplayStop(): void {}
+  audioMuted(): boolean {
+    return false;
+  }
 }
 
 /** localStorage, or an in-memory stand-in when the browser blocks it (private mode, blocked site data). */

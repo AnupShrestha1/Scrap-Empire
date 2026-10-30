@@ -1,6 +1,6 @@
 # Milestone 1 — Core Loop: Plan
 
-Approved 2026-10-30. M1a implemented 2026-10-30; M1b next. Builds on [GAME_DESIGN.md](GAME_DESIGN.md) §6 and [ARCHITECTURE.md](ARCHITECTURE.md) §8.
+Approved 2026-10-30. M1a and M1b implemented 2026-10-30 (sell pads moved into M1a to fix a deadlock). Builds on [GAME_DESIGN.md](GAME_DESIGN.md) §6 and [ARCHITECTURE.md](ARCHITECTURE.md) §8.
 
 **Goal:** a new player goes truck → pile → shredder → bins → sell → first upgrade in about two minutes, guided only by objectives, on desktop and phone.
 

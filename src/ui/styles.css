@@ -185,3 +185,120 @@ body {
   font-size: 14px;
   font-weight: 900;
 }
+
+/* Objective banner, under the cash chip. */
+.hud {
+  flex-direction: column;
+  align-items: center;
+}
+
+.hud-objective {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: min(92vw, 520px);
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(19, 36, 58, 0.92);
+  border: 2px solid #2c4766;
+  color: #e8eef6;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hud-objective[hidden] {
+  display: none;
+}
+
+.hud-objective-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud-objective-count {
+  color: #9fd3f5;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-objective-reward {
+  color: #ffd76a;
+  font-weight: 800;
+}
+
+.hud-buttons {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.hud-button {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 10px;
+  background: #13243a;
+  border: 2px solid #2c4766;
+  color: #e8eef6;
+  cursor: pointer;
+}
+
+.hud-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.hud-button.off {
+  color: #6f86a3;
+}
+
+.toasts {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.toast {
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: rgba(19, 36, 58, 0.95);
+  border: 2px solid #2c4766;
+  color: #e8eef6;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: toast-in 0.18s ease-out;
+}
+
+.toast-warn {
+  border-color: #e0483c;
+  color: #ffd0c8;
+}
+
+.toast-good {
+  border-color: #5cc84a;
+  color: #d8ffcf;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* The debug panel moves to the bottom-left so it never covers the HUD. */
+.debug-overlay {
+  top: auto;
+  bottom: 8px;
+}

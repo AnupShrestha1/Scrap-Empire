@@ -10,7 +10,10 @@ import { SAVE_KEYS, SaveManager } from './save/saveManager';
 import { parseGrid } from './sim/grid';
 import { Simulation } from './sim/simulation';
 import { createNewGame, isGameState, sanitizeState } from './sim/state';
+import { Sfx } from './audio/sfx';
+import { SettingsStore } from './settings';
 import { Hud } from './ui/hud';
+import { Toasts } from './ui/toasts';
 import { createGame } from './view/game';
 
 async function boot(): Promise<void> {
@@ -34,7 +37,9 @@ async function boot(): Promise<void> {
   gameEl.addEventListener('pointerdown', () => window.focus());
   const input = new InputManager(window, gameEl, uiEl);
 
-  const ctx: GameContext = { platform, sim, input, hud: new Hud(uiEl) };
+  const settings = new SettingsStore(platform.storage);
+  const sfx = new Sfx(() => !settings.value.sound || platform.audioMuted());
+  const ctx: GameContext = { platform, sim, input, settings, sfx, hud: new Hud(uiEl, settings), toasts: new Toasts(uiEl) };
   const game = createGame(gameEl, ctx);
   new DebugOverlay(uiEl, game, ctx, {
     resetSave: () => {

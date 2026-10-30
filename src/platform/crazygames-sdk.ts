@@ -9,6 +9,8 @@ export interface CrazyGamesSdk {
     loadingStop(): void;
     gameplayStart(): void;
     gameplayStop(): void;
+    /** Portal settings; muteAudio must silence the game. */
+    readonly settings?: { readonly muteAudio?: boolean };
   };
   /** Mirrors localStorage: guests are stored locally, logged-in players sync to their account. 1 MB limit. */
   readonly data: {

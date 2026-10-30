@@ -12,6 +12,8 @@ import {
   drawItem,
   drawPad,
   padFrame,
+  ARROW_FRAME,
+  drawArrow,
   drawLamp,
   drawPile,
   drawShredder,
@@ -59,6 +61,7 @@ export class BootScene extends Phaser.Scene {
       const size = padFrame(pad.rect.w, pad.rect.h);
       atlas.add(FRAME.pad(pad.station, pad.zone), size.w, size.h, drawPad(pad.rect.w, pad.rect.h, pad.kind));
     }
+    atlas.add(FRAME.arrow, ARROW_FRAME.w, ARROW_FRAME.h, drawArrow);
     atlas.commit(this.textures, TEX.atlas);
 
     this.scene.start(SCENE.world);

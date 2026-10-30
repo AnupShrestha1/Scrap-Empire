@@ -75,7 +75,7 @@ export function parseGrid(rows: readonly string[], stations: readonly StationDef
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) solids.push(tileSolids(tileAtXY(x, y)!, x, y, tileAtXY));
   }
-  for (const s of stations) addRect(solids, width, height, s.rect);
+  for (const s of stations) if (s.kind !== 'cashPad') addRect(solids, width, height, s.rect);
 
   return { width, height, tiles, solids, playerStart };
 }

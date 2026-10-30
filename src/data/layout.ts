@@ -8,6 +8,7 @@
 // Stations (machines, piles, bins) are listed separately below; their footprints are solid.
 
 import type { StationDef } from '../sim/stations';
+import type { UpgradeId } from './upgrades';
 import { BINS, PILE, SHREDDER } from './balance';
 
 export const YARD: readonly string[] = [
@@ -60,6 +61,7 @@ export const STATIONS: readonly StationDef[] = [
     kind: 'processor',
     rect: { x: 10, y: 9, w: 2, h: 2 },
     recipe: SHREDDER,
+    speedUpgrade: 'shredderSpeed',
     zones: { input: { x: 10, y: 11, w: 2, h: 1 }, output: { x: 12, y: 9, w: 1, h: 2 } },
   },
   {
@@ -79,7 +81,17 @@ export const STATIONS: readonly StationDef[] = [
     capacity: BINS.capacity,
     zones: { deposit: { x: 14, y: 10, w: 3, h: 4 }, sell: { x: 17, y: 10, w: 1, h: 4 } },
   },
+  // Upgrade pads, each beside what it improves and off the main walking routes.
+  cashPad('pad-supply', 'supply', 6, 6),
+  cashPad('pad-shredder', 'shredderSpeed', 12, 12),
+  cashPad('pad-bins', 'binSize', 15, 15),
+  cashPad('pad-carry', 'carry', 11, 17),
 ];
+
+function cashPad(id: string, upgrade: UpgradeId, x: number, y: number): StationDef {
+  const rect = { x, y, w: 1, h: 1 };
+  return { id, kind: 'cashPad', upgrade, rect, zones: { buy: rect } };
+}
 
 /** The supplier truck drives along the road on row `row`, from off-map to its parking spot by the pile. */
 export const TRUCK_ROUTE = {

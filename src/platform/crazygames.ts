@@ -26,4 +26,8 @@ export class CrazyGamesPlatform implements Platform {
   gameplayStop(): void {
     this.sdk.game.gameplayStop();
   }
+
+  audioMuted(): boolean {
+    return this.sdk.game.settings?.muteAudio === true;
+  }
 }

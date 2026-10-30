@@ -1,5 +1,6 @@
 import type { ProcessorRecipe } from '../data/balance';
 import type { ItemId } from '../data/items';
+import type { UpgradeId } from '../data/upgrades';
 
 /** A rectangle of tiles: covers [x, x + w) × [y, y + h). */
 export interface Rect {
@@ -25,6 +26,8 @@ export interface PileDef extends StationBase {
 export interface ProcessorDef extends StationBase {
   kind: 'processor';
   recipe: ProcessorRecipe;
+  /** The upgrade that speeds this machine up. */
+  speedUpgrade?: UpgradeId;
   zones: { input: Rect; output: Rect };
 }
 
@@ -36,12 +39,20 @@ export interface BinDef extends StationBase {
   zones: { deposit: Rect; sell: Rect };
 }
 
-export type StationDef = PileDef | ProcessorDef | BinDef;
+/** A walkable pad where the player pays in cash for an upgrade. Not solid. */
+export interface CashPadDef extends StationBase {
+  kind: 'cashPad';
+  upgrade: UpgradeId;
+  zones: { buy: Rect };
+}
+
+export type StationDef = PileDef | ProcessorDef | BinDef | CashPadDef;
 
 export type ZoneHit =
   | { station: PileDef; zone: 'take' | 'return' }
   | { station: ProcessorDef; zone: 'input' | 'output' }
-  | { station: BinDef; zone: 'deposit' | 'sell' };
+  | { station: BinDef; zone: 'deposit' | 'sell' }
+  | { station: CashPadDef; zone: 'buy' };
 
 export function inRect(r: Rect, x: number, y: number): boolean {
   return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
@@ -62,6 +73,9 @@ export function zoneAt(stations: readonly StationDef[], x: number, y: number): Z
       case 'bin':
         if (inRect(s.zones.deposit, x, y)) return { station: s, zone: 'deposit' };
         if (inRect(s.zones.sell, x, y)) return { station: s, zone: 'sell' };
+        break;
+      case 'cashPad':
+        if (inRect(s.zones.buy, x, y)) return { station: s, zone: 'buy' };
         break;
     }
   }

@@ -7,11 +7,15 @@ import type { Simulation } from '../../sim/simulation';
 import { secondsToTicks } from '../../sim/state';
 import type { BinDef, PileDef, ProcessorDef, StationDef } from '../../sim/stations';
 import { processorStatus, trayTotal } from '../../sim/systems/processing';
+import { binCapacity, processorCycleTicks } from '../../sim/effective';
+import { currentObjective } from '../../sim/systems/objectives';
+import { UPGRADES, upgradeCost } from '../../data/upgrades';
+import type { CashPadDef } from '../../sim/stations';
 import { BIN_FRAME, BIN_LEVELS, PILE_FRAME, PILE_STAGES, SHREDDER_FRAME, SHREDDER_LAMP_OFFSET, TRUCK_FRAME } from '../art/stations';
 import { depthAt, toScreen, type IsoProjection } from '../iso';
 import { FRAME, TEX } from '../keys';
 import { placeFrame } from './decor';
-import type { Labels } from './labels';
+import { LABEL_DEPTH, type Labels } from './labels';
 
 /** Something drawn from simulation state every frame. */
 export interface View {
@@ -84,13 +88,13 @@ class ProcessorView implements View {
 
   update(sim: Simulation, timeMs: number): void {
     const state = sim.state.processors[this.def.id]!;
-    const status = processorStatus(this.def, state);
+    const cycle = processorCycleTicks(this.def, sim.state);
+    const status = processorStatus(this.def, state, cycle);
     this.body.setFrame(FRAME.shredder(status === 'processing' && Math.floor(timeMs / 150) % 2 === 1 ? 1 : 0));
     this.lamp.setFrame(FRAME.lamp(status));
 
     this.ring.clear();
     if (status === 'processing') {
-      const cycle = secondsToTicks(this.def.recipe.cycleS);
       const fraction = Math.min(1, (state.progress + sim.alpha) / cycle);
       this.ring.lineStyle(4, 0x5cc84a, 1);
       this.ring.beginPath();
@@ -131,10 +135,11 @@ class BinView implements View {
 
   update(sim: Simulation, timeMs: number): void {
     const count = sim.state.bins[this.def.id]!.count;
-    const full = count >= this.def.capacity;
-    this.image.setFrame(FRAME.bin(this.def.item, level(count, this.def.capacity, BIN_LEVELS)));
+    const capacity = binCapacity(this.def, sim.state);
+    const full = count >= capacity;
+    this.image.setFrame(FRAME.bin(this.def.item, level(count, capacity, BIN_LEVELS)));
     const name = itemName(this.def.item);
-    this.label.setText(full ? t('station.storageFull', { item: name }) : `${name} ${count}/${this.def.capacity}`);
+    this.label.setText(full ? t('station.storageFull', { item: name }) : `${name} ${count}/${capacity}`);
     const flashing = timeMs < this.flashUntil && Math.floor(timeMs / 150) % 2 === 0;
     this.label.setColor(full ? (flashing ? '#ffffff' : '#ff8a7a') : '#ffffff');
     this.image.setTint(flashing ? 0xff9a8a : 0xffffff);
@@ -181,6 +186,71 @@ class TruckView implements View {
   }
 }
 
+/** An upgrade pad: name, level and price above it, with a bar filling as the player pays in. */
+class CashPadView implements View {
+  private readonly title: Phaser.GameObjects.Text;
+  private readonly price: Phaser.GameObjects.Text;
+  private readonly bar: Phaser.GameObjects.Graphics;
+
+  constructor(scene: Phaser.Scene, proj: IsoProjection, labels: Labels, private readonly def: CashPadDef) {
+    const { x, y, w, h } = def.rect;
+    const at = toScreen(proj, x + w / 2, y + h / 2);
+    this.title = labels.add(12, '#cfe3ff').setPosition(at.x, at.y - 40);
+    this.price = labels.add(13, '#ffd76a').setPosition(at.x, at.y - 22);
+    this.bar = scene.add.graphics().setPosition(at.x, at.y - 14).setDepth(LABEL_DEPTH);
+  }
+
+  update(sim: Simulation): void {
+    const id = this.def.upgrade;
+    const level = sim.state.upgrades[id];
+    const max = level >= UPGRADES[id].maxLevel;
+    this.title.setText(t(UPGRADE_NAME[id], { level: Math.min(level + 1, UPGRADES[id].maxLevel) }));
+    this.price.setText(max ? t('upgrade.max') : `$${upgradeCost(id, level)}`);
+    this.bar.clear();
+    const paid = sim.state.upgradePaid[id];
+    if (!max && paid > 0) {
+      const width = 44;
+      this.bar.fillStyle(0x13243a, 0.9).fillRect(-width / 2 - 2, -3, width + 4, 8);
+      this.bar.fillStyle(0x5cc84a, 1).fillRect(-width / 2, -1, (width * paid) / upgradeCost(id, level), 4);
+    }
+  }
+}
+
+const UPGRADE_NAME = {
+  carry: 'upgrade.carry',
+  shredderSpeed: 'upgrade.shredderSpeed',
+  binSize: 'upgrade.binSize',
+  supply: 'upgrade.supply',
+} as const;
+
+/** A bobbing arrow over the zone the current objective is about, when hints are on. */
+export class HintArrowView {
+  private readonly arrow: Phaser.GameObjects.Image;
+
+  constructor(
+    scene: Phaser.Scene,
+    private readonly proj: IsoProjection,
+    private readonly stations: readonly StationDef[],
+  ) {
+    this.arrow = scene.add.image(0, 0, TEX.atlas, FRAME.arrow).setOrigin(0.5, 1).setDepth(LABEL_DEPTH).setVisible(false);
+  }
+
+  update(sim: Simulation, timeMs: number, enabled: boolean): void {
+    const hint = enabled ? currentObjective(sim.state)?.hint : undefined;
+    const station = hint && this.stations.find((s) => s.id === hint.station);
+    const zones = station?.zones as Readonly<Record<string, { x: number; y: number; w: number; h: number }>> | undefined;
+    const rect = hint && zones?.[hint.zone];
+    if (!rect) {
+      this.arrow.setVisible(false);
+      return;
+    }
+    const at = toScreen(this.proj, rect.x + rect.w / 2, rect.y + rect.h / 2);
+    const bob = Math.abs(Math.sin(timeMs / 260)) * 10;
+    // Just above the pad itself, so it never seems to point at a neighbouring zone.
+    this.arrow.setVisible(true).setPosition(at.x, at.y - 8 - bob);
+  }
+}
+
 export interface StationViews {
   views: View[];
   bins: Map<string, BinView>;
@@ -208,6 +278,9 @@ export function createStationViews(
         views.push(view);
         break;
       }
+      case 'cashPad':
+        views.push(new CashPadView(scene, proj, labels, def));
+        break;
     }
   }
   return { views, bins };

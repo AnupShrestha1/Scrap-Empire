@@ -35,6 +35,10 @@ export class DebugOverlay {
     this.speedButton = button('Speed ×1', () => this.cycleSpeed());
     tools.append(
       this.speedButton,
+      button('+$100', () => {
+        ctx.sim.state.money += 100;
+        ctx.sim.dirty = true;
+      }),
       button('Reset save', () => {
         if (confirm('Delete this save and start a new game?')) actions.resetSave();
       }),
