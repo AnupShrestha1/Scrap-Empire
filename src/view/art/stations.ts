@@ -5,6 +5,7 @@ import { along, inDiamond, isoBox, isoDiamond, isoFrame, up, type Pt } from './i
 import { PALETTE as C } from './palette';
 import { ART_SCALE, pixelArt, type Pixels } from './pixel';
 import { seededRandom } from './random';
+import { drawProductIcon } from './factory';
 
 const SCRAP_COLOURS = [C.scrapDark, C.scrapGrey, C.rust, C.rust, C.rustLight, C.scrapGrey, C.scrapBlue];
 
@@ -214,6 +215,10 @@ const INGOT: Partial<Record<ItemId, { top: string; side: string }>> = {
 export function drawItem(item: ItemId) {
   return pixelArt((p) => {
     const g = ITEM_FRAME.ground;
+    if (item === 'sheet' || item === 'can') {
+      drawProductIcon(p, g, item);
+      return;
+    }
     const ingot = INGOT[item];
     if (ingot) {
       isoBox(p, g, 0.5, 0.25, 3, { top: ingot.top, left: ingot.side, right: ingot.side });

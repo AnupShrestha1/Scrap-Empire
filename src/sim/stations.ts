@@ -1,4 +1,4 @@
-import type { ProcessorRecipe } from '../data/balance';
+import type { ManufacturerRecipe, ProcessorRecipe } from '../data/balance';
 import type { ItemId } from '../data/items';
 import type { UpgradeId } from '../data/upgrades';
 
@@ -39,6 +39,29 @@ export interface BinDef extends StationBase {
   zones: { deposit: Rect; sell: Rect };
 }
 
+/** One production line inside the factory. Lines are bought in order on the factory's build pad. */
+export interface LineDef {
+  id: string;
+  /** i18n key for its name. */
+  name: 'machine.press' | 'machine.canLine';
+  recipe: ManufacturerRecipe;
+  /** Bins it pulls inputs from, through a chute (storage is the hub; nobody carries inputs to it). */
+  feeds: readonly string[];
+  buildCost: number;
+}
+
+/**
+ * The factory: one building holding production lines. Each built line pulls from its feed bins and
+ * sells what it makes straight away.
+ */
+export interface FactoryDef extends StationBase {
+  kind: 'factory';
+  lines: readonly LineDef[];
+  /** Raised chutes from bins to the factory, for drawing: tiles along +x from (x, y); shown once `line` is built. */
+  chutes: readonly { x: number; y: number; length: number; line: string }[];
+  zones: { build: Rect };
+}
+
 /** A walkable pad where the player pays in cash for an upgrade. Not solid. */
 export interface CashPadDef extends StationBase {
   kind: 'cashPad';
@@ -46,13 +69,14 @@ export interface CashPadDef extends StationBase {
   zones: { buy: Rect };
 }
 
-export type StationDef = PileDef | ProcessorDef | BinDef | CashPadDef;
+export type StationDef = PileDef | ProcessorDef | BinDef | CashPadDef | FactoryDef;
 
 export type ZoneHit =
   | { station: PileDef; zone: 'take' | 'return' }
   | { station: ProcessorDef; zone: 'input' | 'output' }
   | { station: BinDef; zone: 'deposit' | 'sell' }
-  | { station: CashPadDef; zone: 'buy' };
+  | { station: CashPadDef; zone: 'buy' }
+  | { station: FactoryDef; zone: 'build' };
 
 export function inRect(r: Rect, x: number, y: number): boolean {
   return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
@@ -76,6 +100,9 @@ export function zoneAt(stations: readonly StationDef[], x: number, y: number): Z
         break;
       case 'cashPad':
         if (inRect(s.zones.buy, x, y)) return { station: s, zone: 'buy' };
+        break;
+      case 'factory':
+        if (inRect(s.zones.build, x, y)) return { station: s, zone: 'build' };
         break;
     }
   }

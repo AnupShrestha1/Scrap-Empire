@@ -16,6 +16,11 @@ import { depthAt, toScreen, type IsoProjection } from '../iso';
 import { FRAME, TEX } from '../keys';
 import { placeFrame } from './decor';
 import { LABEL_DEPTH, type Labels } from './labels';
+import { CHUTE_FRAME, FACTORY_FRAME, LINE_LAMP_HEIGHT, lineWindowPoint } from '../art/factory';
+import { ART_SCALE } from '../art/pixel';
+import { padFrame } from '../art/stations';
+import type { FactoryDef } from '../../sim/stations';
+import { batchTicks, lineStatus, missingInput, nextUnbuiltLine } from '../../sim/systems/manufacturing';
 
 /** Something drawn from simulation state every frame. */
 export interface View {
@@ -251,6 +256,99 @@ export class HintArrowView {
   }
 }
 
+/** One production line's indicators: a lamp and progress ring over its window, and a status note. */
+interface LineIndicators {
+  lamp: Phaser.GameObjects.Image;
+  ring: Phaser.GameObjects.Graphics;
+  note: Phaser.GameObjects.Text;
+}
+
+/**
+ * The factory building. Each built line lights a lamp over its window, with a progress ring while it
+ * works and "Needs Iron" when its bin runs short. The build pad in front sells the next line until all
+ * are built. Chutes from the bins appear as their lines are built.
+ */
+class FactoryView implements View {
+  private readonly title: Phaser.GameObjects.Text;
+  private readonly buildPad: Phaser.GameObjects.Image;
+  private readonly buildTitle: Phaser.GameObjects.Text;
+  private readonly buildPrice: Phaser.GameObjects.Text;
+  private readonly buildBar: Phaser.GameObjects.Graphics;
+  private readonly lines: LineIndicators[] = [];
+  private readonly chutes: { image: Phaser.GameObjects.Image; line: string }[] = [];
+
+  constructor(scene: Phaser.Scene, proj: IsoProjection, labels: Labels, private readonly def: FactoryDef) {
+    const { x, y, w, h } = def.rect;
+    const depth = depthAt(x + w / 2, y + h / 2);
+    placeFrame(scene, proj, FRAME.factory, x + w, y + h, FACTORY_FRAME, depth);
+    const roof = toScreen(proj, x + w / 2, y + h / 2);
+    this.title = labels.add(13, '#ffd0c8').setPosition(roof.x, roof.y - 58);
+
+    for (const chute of def.chutes) {
+      for (let i = 0; i < chute.length; i++) {
+        const cx = chute.x + i;
+        const image = placeFrame(scene, proj, FRAME.chute, cx + 1, chute.y + 1, CHUTE_FRAME, depthAt(cx + 0.5, chute.y + 0.5));
+        this.chutes.push({ image, line: chute.line });
+      }
+    }
+
+    def.lines.forEach((_line, i) => {
+      const [gx, gy] = lineWindowPoint(def.rect, i);
+      const at = toScreen(proj, gx, gy);
+      const lampY = at.y - LINE_LAMP_HEIGHT * ART_SCALE;
+      const lamp = scene.add.image(at.x, lampY, TEX.atlas, FRAME.lamp('idle')).setDepth(LABEL_DEPTH - 2);
+      const ring = scene.add.graphics().setPosition(at.x, lampY).setDepth(LABEL_DEPTH - 2);
+      const note = labels.add(11, '#ff8a7a').setPosition(at.x, lampY - 12);
+      this.lines.push({ lamp, ring, note });
+    });
+
+    const b = def.zones.build;
+    this.buildPad = placeFrame(scene, proj, FRAME.pad(def.id, 'build'), b.x + b.w, b.y + b.h, padFrame(b.w, b.h), -0.5);
+    const buildAt = toScreen(proj, b.x + b.w / 2, b.y + b.h / 2);
+    this.buildTitle = labels.add(12, '#cfe3ff').setPosition(buildAt.x, buildAt.y - 22);
+    this.buildPrice = labels.add(13, '#ffd76a').setPosition(buildAt.x, buildAt.y - 4);
+    this.buildBar = scene.add.graphics().setPosition(buildAt.x, buildAt.y + 4).setDepth(LABEL_DEPTH);
+  }
+
+  update(sim: Simulation): void {
+    const { state, binDefs } = sim;
+    const built = this.def.lines.filter((l) => state.lines[l.id]!.built).length;
+    this.title.setText(t('factory.title', { built, total: this.def.lines.length }));
+
+    this.def.lines.forEach((line, i) => {
+      const st = state.lines[line.id]!;
+      const ind = this.lines[i]!;
+      const status = lineStatus(line, st, binDefs, state.bins);
+      ind.lamp.setVisible(status !== 'unbuilt').setFrame(FRAME.lamp(status === 'processing' ? 'processing' : 'idle'));
+      ind.ring.clear();
+      if (status === 'processing') {
+        const fraction = Math.min(1, (st.progress + sim.alpha) / batchTicks(line));
+        ind.ring.lineStyle(4, 0x5cc84a, 1).beginPath();
+        ind.ring.arc(0, 0, 12, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2).strokePath();
+      }
+      const missing = status === 'starved' ? missingInput(line, binDefs, state.bins) : undefined;
+      ind.note.setText(missing ? t('station.needs', { item: itemName(missing) }) : '');
+    });
+    for (const chute of this.chutes) chute.image.setVisible(state.lines[chute.line]?.built ?? false);
+
+    const next = nextUnbuiltLine(this.def, state);
+    this.buildPad.setVisible(!!next);
+    this.buildTitle.setVisible(!!next);
+    this.buildPrice.setVisible(!!next);
+    this.buildBar.clear();
+    if (!next) return;
+    const index = this.def.lines.indexOf(next) + 1;
+    this.buildTitle.setText(t('build.line', { n: index, name: t(next.name) }));
+    this.buildPrice.setText(`$${next.buildCost}`);
+    const paid = state.buildPaid[next.id] ?? 0;
+    if (paid > 0) {
+      const width = 44;
+      this.buildBar.fillStyle(0x13243a, 0.9).fillRect(-width / 2 - 2, -3, width + 4, 8);
+      this.buildBar.fillStyle(0x5cc84a, 1).fillRect(-width / 2, -1, (width * paid) / next.buildCost, 4);
+    }
+  }
+}
+
 export interface StationViews {
   views: View[];
   bins: Map<string, BinView>;
@@ -280,6 +378,9 @@ export function createStationViews(
       }
       case 'cashPad':
         views.push(new CashPadView(scene, proj, labels, def));
+        break;
+      case 'factory':
+        views.push(new FactoryView(scene, proj, labels, def));
         break;
     }
   }

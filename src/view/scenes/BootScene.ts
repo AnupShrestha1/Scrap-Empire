@@ -26,6 +26,7 @@ import {
   TRUCK_FRAME,
 } from '../art/stations';
 import { AtlasBuilder } from '../art/textures';
+import { CHUTE_FRAME, drawChute, drawFactory, FACTORY_FRAME } from '../art/factory';
 import { FRAME, SCENE, TEX } from '../keys';
 
 const STATUSES = ['idle', 'processing', 'ready', 'blocked'] as const;
@@ -37,7 +38,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    const atlas = new AtlasBuilder(1024);
+    const atlas = new AtlasBuilder(2048, 1024);
     atlas.add(FRAME.playerFront, PLAYER_SIZE.w, PLAYER_SIZE.h, drawPlayerFront);
     atlas.add(FRAME.playerBack, PLAYER_SIZE.w, PLAYER_SIZE.h, drawPlayerBack);
     atlas.add(FRAME.crate, OBJECT_SIZE.crate.w, OBJECT_SIZE.crate.h, drawCrate);
@@ -62,6 +63,8 @@ export class BootScene extends Phaser.Scene {
       atlas.add(FRAME.pad(pad.station, pad.zone), size.w, size.h, drawPad(pad.rect.w, pad.rect.h, pad.kind));
     }
     atlas.add(FRAME.arrow, ARROW_FRAME.w, ARROW_FRAME.h, drawArrow);
+    atlas.add(FRAME.factory, FACTORY_FRAME.w, FACTORY_FRAME.h, drawFactory);
+    atlas.add(FRAME.chute, CHUTE_FRAME.w, CHUTE_FRAME.h, drawChute);
     atlas.commit(this.textures, TEX.atlas);
 
     this.scene.start(SCENE.world);

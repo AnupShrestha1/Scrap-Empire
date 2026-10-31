@@ -49,11 +49,38 @@ export const BINS = {
   capacity: 30,
 };
 
+export interface ManufacturerRecipe {
+  /** Items pulled from the machine's feed bins for one batch. */
+  inputs: Readonly<Partial<Record<ItemId, number>>>;
+  /** Sold the moment it is made. */
+  output: ItemId;
+  batchS: number;
+}
+
+export const PRESS: ManufacturerRecipe = {
+  inputs: { iron: 3 },
+  output: 'sheet',
+  batchS: 4,
+};
+
+export const CAN_LINE: ManufacturerRecipe = {
+  inputs: { aluminium: 2 },
+  output: 'can',
+  batchS: 3,
+};
+
+export const BUILD_COSTS = {
+  press: 120,
+  canLine: 300,
+} as const;
+
 /** Cash per item when sold from a bin. */
 export const PRICES: Readonly<Record<ItemId, number>> = {
   scrap: 0,
   iron: 2,
   aluminium: 5,
+  sheet: 9,
+  can: 15,
 };
 
 /** Items sold per second while standing on a sell pad. */

@@ -5,7 +5,8 @@ import { SIM } from '../../config';
 import { binCapacity, carryCapacity } from '../effective';
 import { PLAYER_PLACE, type SimEvent } from '../events';
 import { secondsToTicks, type GameState } from '../state';
-import { zoneAt, type CashPadDef, type StationDef, type ZoneHit } from '../stations';
+import { zoneAt, type CashPadDef, type FactoryDef, type StationDef, type ZoneHit } from '../stations';
+import { nextUnbuiltLine } from './manufacturing';
 
 /** Transient interaction bookkeeping; not saved. */
 export interface InteractionState {
@@ -48,29 +49,39 @@ export function stepInteraction(
   }
   if (!hit) return false;
   if (hit.zone === 'buy') return stepPurchase(state, hit.station, inter, events);
+  if (hit.zone === 'build') return stepBuild(state, hit.station, inter, events);
   if (inter.budget < 1) return false;
   if (!transferOne(state, hit, inter, events)) return false;
   inter.budget -= 1;
   return true;
 }
 
-/** Pays towards the pad's upgrade, a slice per tick, after a short wait. Partial payment is kept. */
-function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState, events: SimEvent[]): boolean {
-  const id = pad.upgrade;
-  const level = state.upgrades[id];
-  if (level >= UPGRADES[id].maxLevel) return false;
-  if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return false;
-
-  const cost = upgradeCost(id, level);
-  const owed = cost - state.upgradePaid[id];
+/**
+ * Takes this tick's slice of a payment, after the player has stood still briefly. Warns once per visit
+ * when they have no cash. Returns the amount taken (0 if none).
+ */
+function takePayment(state: GameState, inter: InteractionState, events: SimEvent[], cost: number, paid: number): number {
+  if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return 0;
+  const owed = cost - paid;
   if (state.money === 0) {
-    if (!inter.warned) events.push({ type: 'needCash', upgrade: id, amount: owed });
+    if (!inter.warned) events.push({ type: 'needCash', amount: owed });
     inter.warned = true;
-    return false;
+    return 0;
   }
   const slice = Math.max(1, Math.ceil(cost / secondsToTicks(PURCHASE.payS)));
   const pay = Math.min(slice, owed, state.money);
   state.money -= pay;
+  return pay;
+}
+
+/** Pays towards the pad's upgrade, a slice per tick. Partial payment is kept. */
+function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState, events: SimEvent[]): boolean {
+  const id = pad.upgrade;
+  const level = state.upgrades[id];
+  if (level >= UPGRADES[id].maxLevel) return false;
+  const cost = upgradeCost(id, level);
+  const pay = takePayment(state, inter, events, cost, state.upgradePaid[id]);
+  if (pay === 0) return false;
   state.upgradePaid[id] += pay;
   if (state.upgradePaid[id] >= cost) {
     state.upgrades[id] = level + 1;
@@ -82,9 +93,26 @@ function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState
   return true;
 }
 
+/** Pays towards the factory's next production line. Partial payment is kept. */
+function stepBuild(state: GameState, factory: FactoryDef, inter: InteractionState, events: SimEvent[]): boolean {
+  const line = nextUnbuiltLine(factory, state);
+  if (!line) return false;
+  const pay = takePayment(state, inter, events, line.buildCost, state.buildPaid[line.id]!);
+  if (pay === 0) return false;
+  state.buildPaid[line.id]! += pay;
+  if (state.buildPaid[line.id]! >= line.buildCost) {
+    state.lines[line.id]!.built = true;
+    state.buildPaid[line.id] = 0;
+    events.push({ type: 'built', station: line.id });
+    // Staying on the pad moves on to the next line, after a breath.
+    inter.dwell = secondsToTicks(PURCHASE.delayS) - secondsToTicks(PURCHASE.nextLevelPauseS);
+  }
+  return true;
+}
+
 function transferOne(
   state: GameState,
-  hit: Exclude<ZoneHit, { zone: 'buy' }>,
+  hit: Exclude<ZoneHit, { zone: 'buy' | 'build' }>,
   inter: InteractionState,
   events: SimEvent[],
 ): boolean {
@@ -135,6 +163,8 @@ function transferOne(
     }
 
     case 'sell': {
+      // Selling can't be undone, so like cash pads it waits until the player stands still.
+      if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return false;
       const bin = state.bins[id]!;
       if (bin.count === 0) return false;
       const item = hit.station.item;

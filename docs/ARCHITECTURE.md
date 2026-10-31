@@ -221,7 +221,7 @@ Each milestone ends with its exit criteria checked and your review before the ne
 - it runs smoothly at 1080p and in the mobile viewport;
 - unit tests cover processing, storage back-pressure and saves.
 
-### M2 — Manufacturing and economy
+### M2 — Manufacturing and economy (see M2_PLAN.md; reshaped into one factory with lines during M2a)
 
 - Feed chutes from the storage row.
 - Press (metal sheets) and can line (aluminium cans), with recipe selection.

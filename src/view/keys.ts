@@ -23,6 +23,8 @@ export const FRAME = {
   item: (item: ItemId) => `item-${item}`,
   pad: (station: string, zone: string) => `pad-${station}-${zone}`,
   arrow: 'hint-arrow',
+  factory: 'factory',
+  chute: 'chute',
 } as const;
 
 export const SCENE = {

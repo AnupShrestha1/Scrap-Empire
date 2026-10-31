@@ -14,20 +14,23 @@ export class AtlasBuilder {
   private cursorY = ATLAS_PADDING;
   private rowHeight = 0;
 
-  constructor(private readonly size: number) {
+  constructor(
+    private readonly width: number,
+    private readonly height: number = width,
+  ) {
     this.canvas = document.createElement('canvas');
-    this.canvas.width = size;
-    this.canvas.height = size;
+    this.canvas.width = width;
+    this.canvas.height = height;
     this.ctx = get2d(this.canvas);
   }
 
   add(name: string, w: number, h: number, draw: Draw): void {
-    if (this.cursorX + w + ATLAS_PADDING > this.size) {
+    if (this.cursorX + w + ATLAS_PADDING > this.width) {
       this.cursorX = ATLAS_PADDING;
       this.cursorY += this.rowHeight + ATLAS_PADDING;
       this.rowHeight = 0;
     }
-    if (this.cursorY + h + ATLAS_PADDING > this.size) throw new Error(`Atlas is full; cannot fit '${name}'`);
+    if (this.cursorY + h + ATLAS_PADDING > this.height) throw new Error(`Atlas is full; cannot fit '${name}'`);
 
     const { ctx } = this;
     ctx.save();

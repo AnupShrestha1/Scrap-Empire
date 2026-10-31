@@ -33,6 +33,9 @@ Genre: "idle arcade" tycoon, built for active play. Progress needs the player pr
 | L | Buying happens on in-world cash pads (build/unlock) and machine terminals (upgrades) | Approved |
 | M | Rare salvage crates that only the player can carry, giving the character a late-game job | Approved |
 | N | Isometric view (2:1 diamond grid, as in the art reference) instead of true top-down. The simulation stays on a square grid; only the view projects it | Approved |
+| O | One factory building with production lines bought one at a time, instead of separate machines on plots | Approved (user's direction, M2a) |
+| P | Products sell the moment they are made: no product racks and no carrying products | Approved (user's direction, M2a) |
+| Q | Pads that sell, spend or give items back never sit on walking routes, and wait for the player to stand still | Approved (user's direction, M2a) |
 
 ## 4. The yard
 

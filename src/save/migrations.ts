@@ -1,5 +1,5 @@
 /** Current save format. Bump it, and add a migration, whenever GameState changes shape. */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 6;
 
 export type Migration = (state: unknown) => unknown;
 
@@ -31,6 +31,29 @@ export const MIGRATIONS: Migrations = {
     const s = state as Json;
     const zero = { carry: 0, shredderSpeed: 0, binSize: 0, supply: 0 };
     return { ...s, earned: s.money, upgrades: { ...zero }, upgradePaid: { ...zero }, objectives: { index: 0, progress: 0 } };
+  },
+  /** v4 → v5 (M2a): products on processor trays, and machines to build. */
+  4: (state) => {
+    const s = state as Json;
+    const processors: Json = {};
+    for (const [id, p] of Object.entries((s.processors as Json) ?? {})) {
+      const m = p as Json;
+      processors[id] = {
+        ...m,
+        tray: { sheet: 0, can: 0, ...(m.tray as Json) },
+        carry: { sheet: 0, can: 0, ...(m.carry as Json) },
+      };
+    }
+    return { ...s, processors, manufacturers: {}, buildPaid: {} };
+  },
+  /** v5 → v6: separate machines became production lines in one factory; products now sell instantly. */
+  5: (state) => {
+    const { manufacturers, ...s } = state as Json;
+    const lines: Json = {};
+    for (const [id, m] of Object.entries((manufacturers as Json) ?? {})) {
+      lines[id] = { built: Boolean((m as Json).built), progress: 0 };
+    }
+    return { ...s, lines };
   },
 };
 

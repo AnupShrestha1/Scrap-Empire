@@ -16,7 +16,8 @@ export type SimEvent =
   | { type: 'sold'; station: string; item: ItemId; value: number }
   | { type: 'processed'; station: string; item: ItemId }
   | { type: 'upgraded'; upgrade: UpgradeId; level: number }
-  | { type: 'needCash'; upgrade: UpgradeId; amount: number }
+  | { type: 'needCash'; amount: number }
+  | { type: 'built'; station: string }
   | { type: 'objectiveDone'; objective: string; reward: number }
   | { type: 'truckArriving' }
   | { type: 'truckWaiting' }

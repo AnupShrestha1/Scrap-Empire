@@ -37,6 +37,12 @@ export interface BinState {
   count: number;
 }
 
+export interface LineState {
+  built: boolean;
+  /** Ticks into the current batch; 0 when not working. */
+  progress: number;
+}
+
 export type TruckPhase = 'away' | 'arriving' | 'unloading' | 'waiting' | 'leaving';
 const TRUCK_PHASES: readonly string[] = ['away', 'arriving', 'unloading', 'waiting', 'leaving'] satisfies TruckPhase[];
 
@@ -67,6 +73,10 @@ export interface GameState {
   piles: Record<string, PileState>;
   processors: Record<string, ProcessorState>;
   bins: Record<string, BinState>;
+  /** Factory production lines, by line id. */
+  lines: Record<string, LineState>;
+  /** Cash already paid towards building each unbuilt line. */
+  buildPaid: Record<string, number>;
 }
 
 export function secondsToTicks(seconds: number): number {
@@ -90,6 +100,8 @@ export function createNewGame(grid: Grid, stations: readonly StationDef[]): Game
     piles: {},
     processors: {},
     bins: {},
+    lines: {},
+    buildPaid: {},
   };
   return sanitizeState(state, grid, stations);
 }
@@ -116,6 +128,9 @@ export function isGameState(value: unknown): value is GameState {
     isCount(truck.load) &&
     isMapOf(value.piles, (p) => isCount(p.items)) &&
     isMapOf(value.bins, (b) => isCount(b.count)) &&
+    isMapOf(value.lines, (l) => typeof l.built === 'boolean' && isCount(l.progress)) &&
+    isRecord(value.buildPaid) &&
+    Object.values(value.buildPaid).every(isCount) &&
     isMapOf(
       value.processors,
       (m) => isCount(m.hopper) && isCount(m.progress) && isItemCounts(m.tray) && isItemCounts(m.carry, true),
@@ -131,6 +146,8 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
   const piles: Record<string, PileState> = {};
   const processors: Record<string, ProcessorState> = {};
   const bins: Record<string, BinState> = {};
+  const lines: Record<string, LineState> = {};
+  const buildPaid: Record<string, number> = {};
   for (const s of stations) {
     switch (s.kind) {
       case 'pile': {
@@ -147,11 +164,19 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
         break;
       case 'cashPad':
         break;
+      case 'factory':
+        for (const line of s.lines) {
+          lines[line.id] = state.lines[line.id] ?? { built: false, progress: 0 };
+          buildPaid[line.id] = state.buildPaid[line.id] ?? 0;
+        }
+        break;
     }
   }
   state.piles = piles;
   state.processors = processors;
   state.bins = bins;
+  state.lines = lines;
+  state.buildPaid = buildPaid;
 
   const p = state.player;
   const r = PLAYER.halfSize;

@@ -160,6 +160,12 @@ export class WorldScene extends Phaser.Scene {
         toasts.show(t('toast.objectiveDone', { reward: event.reward }), 'good');
         sfx.play('objective');
         break;
+      case 'built': {
+        const line = this.ctx.sim.factoryLine(event.station);
+        if (line) toasts.show(t('toast.built', { name: t(line.name) }), 'good');
+        sfx.play('upgrade');
+        break;
+      }
       case 'truckArriving':
         sfx.play('horn');
         break;

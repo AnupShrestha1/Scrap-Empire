@@ -9,7 +9,7 @@
 
 import type { StationDef } from '../sim/stations';
 import type { UpgradeId } from './upgrades';
-import { BINS, PILE, SHREDDER } from './balance';
+import { BINS, BUILD_COSTS, CAN_LINE, PRESS, PILE, SHREDDER } from './balance';
 
 export const YARD: readonly string[] = [
   'gTggggggTgTTgTTTTggggTggTgTgTTgggg',
@@ -17,8 +17,8 @@ export const YARD: readonly string[] = [
   'Tggggggggggggggggggggggggggggggggg',
   'gg############################gTgT',
   'gg#..........................#ggTT',
-  'gg#.................L....xx..#gTTg',
-  'gg#...........:::::......x...#gTTg',
+  'gg#.................L......xx#gTTg',
+  'gg#...........:::::.........x#gTTg',
   'Tg#...........:::::..........#gTgT',
   'gg#......::::::::::..........#gTgg',
   'TB#......::::::::::..........#gTgT',
@@ -70,8 +70,9 @@ export const STATIONS: readonly StationDef[] = [
     item: 'iron',
     rect: { x: 15, y: 7, w: 2, h: 2 },
     capacity: BINS.capacity,
-    // Drop off from the shredder side and around; sell from the far (+x) side.
-    zones: { deposit: { x: 14, y: 6, w: 3, h: 4 }, sell: { x: 17, y: 6, w: 1, h: 4 } },
+    // Drop off from the shredder side (x 14) and the front (row 9). Sell from behind (row 6): a dead end,
+    // off every route (pile → shredder → bins, bins → factory), so nobody sells by walking past.
+    zones: { deposit: { x: 14, y: 7, w: 3, h: 3 }, sell: { x: 15, y: 6, w: 2, h: 1 } },
   },
   {
     id: 'bin-aluminium',
@@ -79,7 +80,24 @@ export const STATIONS: readonly StationDef[] = [
     item: 'aluminium',
     rect: { x: 15, y: 11, w: 2, h: 2 },
     capacity: BINS.capacity,
-    zones: { deposit: { x: 14, y: 10, w: 3, h: 4 }, sell: { x: 17, y: 10, w: 1, h: 4 } },
+    // Drop off from the shredder side and the back (row 10). Sell from the front (row 13), a dead end.
+    zones: { deposit: { x: 14, y: 10, w: 3, h: 3 }, sell: { x: 15, y: 13, w: 2, h: 1 } },
+  },
+  // The factory: one building whose production lines pull from the bins through chutes and sell what
+  // they make straight away. Lines are bought, in order, on the build pad in front.
+  {
+    id: 'factory',
+    kind: 'factory',
+    rect: { x: 19, y: 7, w: 4, h: 6 },
+    lines: [
+      { id: 'press', name: 'machine.press', recipe: PRESS, feeds: ['bin-iron'], buildCost: BUILD_COSTS.press },
+      { id: 'can-line', name: 'machine.canLine', recipe: CAN_LINE, feeds: ['bin-aluminium'], buildCost: BUILD_COSTS.canLine },
+    ],
+    chutes: [
+      { x: 17, y: 7, length: 2, line: 'press' },
+      { x: 17, y: 11, length: 2, line: 'can-line' },
+    ],
+    zones: { build: { x: 20, y: 13, w: 2, h: 1 } },
   },
   // Upgrade pads, each beside what it improves and off the main walking routes.
   cashPad('pad-supply', 'supply', 6, 6),

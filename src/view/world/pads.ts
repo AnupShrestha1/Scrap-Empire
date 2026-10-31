@@ -17,6 +17,8 @@ export interface PadSpec {
   kind: PadKind;
   /** Shown above the pad when the zone's purpose isn't obvious. */
   label?: string;
+  /** Shown and hidden by its station's view (e.g. a build pad that goes once the machine is built). */
+  dynamic?: boolean;
 }
 
 /** The marked zones: pick up (green), drop off (orange) and sell (gold). Bins take deposits all round, unmarked. */
@@ -31,9 +33,12 @@ export function padsFor(stations: readonly StationDef[]): PadSpec[] {
       pads.push({ station: s.id, zone: 'output', rect: s.zones.output, kind: 'pickup' });
     } else if (s.kind === 'bin') {
       pads.push({ station: s.id, zone: 'sell', rect: s.zones.sell, kind: 'sell', label: t('pad.sell') });
-    } else {
+    } else if (s.kind === 'cashPad') {
       // Cash pads label themselves with the live price (see CashPadView).
       pads.push({ station: s.id, zone: 'buy', rect: s.zones.buy, kind: 'buy' });
+    } else if (s.kind === 'factory') {
+      // Shown only while there are lines left to build (see FactoryView).
+      pads.push({ station: s.id, zone: 'build', rect: s.zones.build, kind: 'buy', dynamic: true });
     }
   }
   return pads;
@@ -41,6 +46,7 @@ export function padsFor(stations: readonly StationDef[]): PadSpec[] {
 
 export function placePads(scene: Phaser.Scene, proj: IsoProjection, labels: Labels, stations: readonly StationDef[]): void {
   for (const pad of padsFor(stations)) {
+    if (pad.dynamic) continue;
     const { x, y, w, h } = pad.rect;
     placeFrame(scene, proj, FRAME.pad(pad.station, pad.zone), x + w, y + h, padFrame(w, h), PAD_DEPTH);
     if (pad.label) {

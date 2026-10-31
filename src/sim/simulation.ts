@@ -2,7 +2,8 @@ import { SIM, TICK_MS } from '../config';
 import type { ProcessorStatus, SimEvent } from './events';
 import type { Grid } from './grid';
 import type { GameState } from './state';
-import type { PileDef, ProcessorDef, StationDef } from './stations';
+import type { BinDef, FactoryDef, LineDef, PileDef, ProcessorDef, StationDef } from './stations';
+import { stepLine } from './systems/manufacturing';
 import { newInteractionState, stepInteraction, type InteractionState } from './systems/interaction';
 import { stepPlayer } from './systems/player';
 import { processorCycleTicks } from './effective';
@@ -35,6 +36,9 @@ export class Simulation {
   private readonly statuses = new Map<string, ProcessorStatus>();
   private readonly truckPile: PileDef;
   private readonly processorDefs: readonly ProcessorDef[];
+  private readonly factories: readonly FactoryDef[];
+  /** Bin definitions by id, for machines that pull from them. */
+  readonly binDefs: ReadonlyMap<string, BinDef>;
 
   constructor(state: GameState, grid: Grid, stations: readonly StationDef[], truckPileId: string) {
     this.state = state;
@@ -45,6 +49,8 @@ export class Simulation {
     if (!pile) throw new Error(`Truck route needs pile '${truckPileId}'`);
     this.truckPile = pile;
     this.processorDefs = stations.filter((s): s is ProcessorDef => s.kind === 'processor');
+    this.factories = stations.filter((s): s is FactoryDef => s.kind === 'factory');
+    this.binDefs = new Map(stations.filter((s): s is BinDef => s.kind === 'bin').map((b) => [b.id, b]));
     for (const def of this.processorDefs) {
       this.statuses.set(def.id, processorStatus(def, state.processors[def.id]!, processorCycleTicks(def, state)));
     }
@@ -75,6 +81,15 @@ export class Simulation {
     return this.accumulator / TICK_MS;
   }
 
+  /** A factory production line by id. */
+  factoryLine(id: string): LineDef | undefined {
+    for (const factory of this.factories) {
+      const line = factory.lines.find((l) => l.id === id);
+      if (line) return line;
+    }
+    return undefined;
+  }
+
   /** Hands over everything that happened since the last call. */
   drainEvents(out: SimEvent[]): SimEvent[] {
     out.length = 0;
@@ -100,6 +115,11 @@ export class Simulation {
       if (status !== this.statuses.get(def.id)) {
         this.statuses.set(def.id, status);
         events.push({ type: 'processorStatus', station: def.id, status });
+      }
+    }
+    for (const factory of this.factories) {
+      for (const line of factory.lines) {
+        changed = stepLine(factory, line, state.lines[line.id]!, this.binDefs, state, events) || changed;
       }
     }
     // Objectives look at this tick's events only (earlier ones may not have been drained yet).
