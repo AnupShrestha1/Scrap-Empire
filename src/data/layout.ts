@@ -1,5 +1,5 @@
 // The yard. Grid x runs down-right on screen and y down-left, so the chain (gate → dump site → shredder
-// → bins → factory) reads from the top-left of the screen towards the bottom-right.
+// → bins → factory → loading bay → east gate) reads from the top-left of the screen towards the bottom-right.
 //
 // Ground:  .  dirt      :  concrete   =  road      g  grass     ~  water (solid)   d  dump ground
 // Solid:   #  fence     T  tree       L  lamp post B  guard booth   x  crate
@@ -9,43 +9,44 @@
 // solid; the dump site and pads are walkable.
 //
 // Pad rule (see docs and tests): pads that sell, spend or take items back never sit on a walking route.
-// Routes: dump field → shredder input → shredder output → each bin's drop-off → factory build pad.
+// Routes: dump field → shredder input → shredder output → each bin's drop-off → factory build pad,
+// and factory line outputs → loading bay truck zones.
 
 import type { StationDef } from '../sim/stations';
 import type { UpgradeId } from './upgrades';
 import { BINS, BUILD_COSTS, CAN_LINE, FIELD, PRESS, SHREDDER } from './balance';
 
 export const YARD: readonly string[] = [
-  'gTggggggTgTTgTTTTggggTggTgTgTTggggggTTTgTTgTgg',
-  'TggTTggTggTgTTgggTgTgTTggggTgTggTTgTTggTTgTTgT',
-  'gggggggggggggggggggggggggggggggggggggggggggTgg',
-  'Tg########################################gTgT',
-  'Tg#......................................#gggT',
-  'Tg#............................L......xx.#gTTg',
-  'Tg#.dddddddddddddd.....................x.#gggg',
-  'gg#.dddddddddddddd........::::...........#ggTT',
-  'gg#.dddddddddddddd........::::...........#gTgg',
-  'gg#.dddddddddddddd.::::::.::::...........#gggg',
-  'TB#.dddddddddddddd.::::::.::::...........#gggg',
-  'gg#.dddddddddddddd.::::::.::::...........#gTgg',
-  '====dddddddddddddd.::::::.::::...........#ggTT',
-  '====dddddddddddddd.::::::.::::...........#gTTT',
-  'gg#.dddddddddddddd.::::::.::::...........#gggT',
-  'gg#.dddddddddddddd.::::::.::::...........#gTTg',
-  'gg#.dddddddddddddd........::::...........#gggT',
-  'gg#.dddddddddddddd.L......::::...........#gTgT',
-  'Tg#.dddddddddddddd........::::...........#ggTg',
-  'Tg#.dddddddddddddd........::::...........#gTgg',
-  'gg#.......................::::...........#ggTg',
-  'Tg#.......P..............................#gggT',
-  'gg#.L..........................L.........#gggT',
-  'gg#....................................x.#ggTg',
-  'gg#....................................x.#gTgT',
-  'Tg#......................................#gTTg',
-  'gg########################################ggTT',
-  'gggggggggggggggggggg~~~~~~~~~~~~~~~~~~~~~~~~~~',
-  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
-  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  'gTggggggTgTTgTTTTggggTggTgTgTTggggggTTTgTTgTggTggTTggTgg',
+  'TgTTgggTgTgTTggggTgTggTTgTTggTTgTTgTgTggTTgTTggTTTTgTggg',
+  'ggggggggggggggggggggggggggggggggggggggggggggggggggggggTT',
+  'gg##################################################gTgg',
+  'gg#................................................#gggg',
+  'Tg#............................L...................#gggg',
+  'Tg#.dddddddddddddd.....................::::::::::::#gggg',
+  'Tg#.dddddddddddddd........::::.........::::::::::::#gTTT',
+  'Tg#.dddddddddddddd........::::.........::::::::::::=====',
+  'gg#.dddddddddddddd.::::::.::::.........::::::::::::=====',
+  'gB#.dddddddddddddd.::::::.::::.........::::::::::::=====',
+  'gg#.dddddddddddddd.::::::.::::.........::::::::::::=====',
+  '====dddddddddddddd.::::::.::::.........::::::::::::=====',
+  '====dddddddddddddd.::::::.::::.........::::::::::::=====',
+  'gg#.dddddddddddddd.::::::.::::.........::::::::::::=====',
+  'Tg#.dddddddddddddd.::::::.::::.........::::::::::::#ggTT',
+  'gg#.dddddddddddddd........::::.........::::::::::::#gggg',
+  'Tg#.dddddddddddddd.L......::::.........::::::::::::#ggTg',
+  'Tg#.dddddddddddddd........::::.........::::::::::::#gTgT',
+  'gg#.dddddddddddddd........::::.....................#gTTg',
+  'gg#.......................::::.....................#gggT',
+  'gg#.......P..................................L.....#gTgg',
+  'Tg#.L..........................L...................#gggg',
+  'Tg#.................................x..........xx..#gggT',
+  'gg#.................................x...........x..#ggTg',
+  'Tg#................................................#gTTT',
+  'gg##################################################gggT',
+  'Tggggggggggggggggggg~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
 ];
 
 /**
@@ -103,7 +104,16 @@ export const STATIONS: readonly StationDef[] = [
     kind: 'factory',
     rect: { x: 33, y: 9, w: 4, h: 6 },
     lines: [
-      { id: 'press', name: 'machine.press', recipe: PRESS, feeds: ['bin-iron'], buildCost: BUILD_COSTS.press, speedUpgrade: 'pressSpeed' },
+      {
+        id: 'press',
+        name: 'machine.press',
+        recipe: PRESS,
+        feeds: ['bin-iron'],
+        buildCost: BUILD_COSTS.press,
+        speedUpgrade: 'pressSpeed',
+        // Products come out on the factory's bay side.
+        output: { x: 37, y: 9, w: 1, h: 2 },
+      },
       {
         id: 'can-line',
         name: 'machine.canLine',
@@ -112,6 +122,7 @@ export const STATIONS: readonly StationDef[] = [
         buildCost: BUILD_COSTS.canLine,
         requiresLevel: 2,
         speedUpgrade: 'canSpeed',
+        output: { x: 37, y: 12, w: 1, h: 2 },
       },
     ],
     zones: { build: { x: 34, y: 15, w: 2, h: 1 } },
@@ -120,12 +131,32 @@ export const STATIONS: readonly StationDef[] = [
   cashPad('pad-supply', 'supply', 7, 23),
   cashPad('pad-carry', 'carry', 10, 23),
   cashPad('pad-magnet', 'magnet', 13, 23),
-  cashPad('pad-shredder', 'shredderSpeed', 20, 9),
-  cashPad('pad-yield', 'shredderYield', 22, 9),
-  cashPad('pad-extraction', 'extraction', 24, 9),
+  cashPad('pad-shredder', 'shredderSpeed', 21, 9),
+  cashPad('pad-yield', 'shredderYield', 23, 9),
+  cashPad('pad-extraction', 'extraction', 25, 9),
   cashPad('pad-bins', 'binSize', 30, 20),
-  cashPad('pad-press-speed', 'pressSpeed', 37, 10),
-  cashPad('pad-can-speed', 'canSpeed', 37, 13),
+  // Line speed pads behind the factory, a dead end.
+  cashPad('pad-press-speed', 'pressSpeed', 34, 8),
+  cashPad('pad-can-speed', 'canSpeed', 35, 8),
+  // The loading bay: buyer trucks back in along two lanes from the east gate. Load them from the zone at
+  // their tail; products can also be sold outright at the outlet, a dead end south of the lanes.
+  {
+    id: 'bay-a',
+    kind: 'bay',
+    rect: { x: 44, y: 9, w: 3, h: 1 },
+    lane: { row: 9, parkX: 44, startX: 58 },
+    zones: { load: { x: 42, y: 8, w: 2, h: 3 } },
+  },
+  {
+    id: 'bay-b',
+    kind: 'bay',
+    rect: { x: 44, y: 13, w: 3, h: 1 },
+    lane: { row: 13, parkX: 44, startX: 58 },
+    zones: { load: { x: 42, y: 12, w: 2, h: 3 } },
+  },
+  // The staff hut below the dump site; hire employees on the pad in front of it (a dead end).
+  { id: 'staff-hut', kind: 'staffHut', rect: { x: 16, y: 21, w: 2, h: 2 }, zones: { hire: { x: 16, y: 23, w: 2, h: 1 } } },
+  { id: 'outlet', kind: 'outlet', rect: { x: 44, y: 17, w: 2, h: 1 }, zones: { sell: { x: 44, y: 17, w: 2, h: 1 } } },
 ];
 
 function cashPad(id: string, upgrade: UpgradeId, x: number, y: number): StationDef {

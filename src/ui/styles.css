@@ -330,3 +330,40 @@ body {
   width: 0;
   background: #5cc84a;
 }
+
+/* Drop button: mid-low on the left, big enough for a thumb. */
+.hud-drop {
+  pointer-events: auto;
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 14px);
+  top: 62%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: #13243a;
+  border: 3px solid #ff9a3c;
+  color: #ffd0a0;
+  font: 800 12px var(--font);
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.hud-drop svg {
+  width: 26px;
+  height: 26px;
+}
+
+.hud-drop:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hud-drop:not(:disabled):active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}

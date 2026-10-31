@@ -33,13 +33,18 @@ async function boot(): Promise<void> {
   const autosave = new AutoSaver(saves, sim);
   autosave.start();
 
+  // Q drops everything carried, like the on-screen Drop button.
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyQ' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) sim.requestDrop();
+  });
+
   // Clicking the game focuses its iframe, so the keyboard works on the portal page.
   gameEl.addEventListener('pointerdown', () => window.focus());
   const input = new InputManager(window, gameEl, uiEl);
 
   const settings = new SettingsStore(platform.storage);
   const sfx = new Sfx(() => !settings.value.sound || platform.audioMuted());
-  const ctx: GameContext = { platform, sim, input, settings, sfx, hud: new Hud(uiEl, settings), toasts: new Toasts(uiEl) };
+  const ctx: GameContext = { platform, sim, input, settings, sfx, hud: new Hud(uiEl, settings, () => sim.requestDrop()), toasts: new Toasts(uiEl) };
   const game = createGame(gameEl, ctx);
   new DebugOverlay(uiEl, game, ctx, {
     resetSave: () => {

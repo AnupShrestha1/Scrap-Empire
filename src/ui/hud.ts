@@ -11,6 +11,9 @@ const ICON_SOUND_OFF =
 const ICON_HINT =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M6 10l6 6 6-6" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 20h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>';
 
+const ICON_DROP =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11M7 10l5 5 5-5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 18h16v3H4z" fill="currentColor"/></svg>';
+
 /** The always-visible HUD: cash, the current objective, and sound and hint toggles. */
 export class Hud {
   private readonly cash: HTMLSpanElement;
@@ -22,9 +25,14 @@ export class Hud {
   private readonly objectiveReward: HTMLSpanElement;
   private readonly soundButton: HTMLButtonElement;
   private readonly hintButton: HTMLButtonElement;
+  private readonly dropButton: HTMLButtonElement;
   private shown = '';
 
-  constructor(layer: HTMLElement, private readonly settings: SettingsStore) {
+  constructor(
+    layer: HTMLElement,
+    private readonly settings: SettingsStore,
+    onDrop: () => void,
+  ) {
     const bar = el('div', 'hud');
     const chip = el('div', 'hud-chip');
     chip.setAttribute('aria-label', t('hud.cash'));
@@ -54,11 +62,20 @@ export class Hud {
     this.hintButton = iconButton(() => this.toggle('hints'));
     this.hintButton.innerHTML = ICON_HINT;
     buttons.append(this.soundButton, this.hintButton);
-    layer.append(bar, buttons);
+
+    // Drop everything carried, from the left edge where a thumb can reach it (Q on a keyboard).
+    this.dropButton = el('button', 'hud-drop');
+    this.dropButton.type = 'button';
+    this.dropButton.innerHTML = `${ICON_DROP}<span>${t('hud.drop')}</span>`;
+    this.dropButton.setAttribute('aria-label', t('hud.dropLabel'));
+    this.dropButton.addEventListener('click', onDrop);
+    this.dropButton.addEventListener('pointerdown', (e) => e.stopPropagation());
+    layer.append(bar, buttons, this.dropButton);
     this.refreshButtons();
   }
 
   update(state: GameState): void {
+    this.dropButton.disabled = state.player.stack.length === 0;
     const objective = currentObjective(state);
     const key = `${state.money}|${state.earned}|${state.objectives.index}|${state.objectives.progress}`;
     if (key === this.shown) return;

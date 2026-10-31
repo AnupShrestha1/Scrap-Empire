@@ -1,0 +1,111 @@
+import { describe, expect, it } from 'vitest';
+import { ORDERS, PRICES } from '../src/data/balance';
+import { STATIONS, YARD } from '../src/data/layout';
+import { PURCHASE } from '../src/data/upgrades';
+import { memoryStorage } from '../src/platform/memoryStorage';
+import { SAVE_KEYS, SaveManager } from '../src/save/saveManager';
+import type { SimEvent } from '../src/sim/events';
+import { parseGrid } from '../src/sim/grid';
+import { createNewGame, isGameState, sanitizeState, secondsToTicks, type GameState } from '../src/sim/state';
+import type { BayDef, FactoryDef, OutletDef } from '../src/sim/stations';
+import { stepBay } from '../src/sim/systems/bays';
+import { newInteractionState, stepInteraction } from '../src/sim/systems/interaction';
+
+const grid = parseGrid(YARD, STATIONS);
+const factory = STATIONS.find((s): s is FactoryDef => s.kind === 'factory')!;
+const bayA = STATIONS.find((s): s is BayDef => s.id === 'bay-a')!;
+const outlet = STATIONS.find((s): s is OutletDef => s.kind === 'outlet')!;
+
+function runBay(state: GameState, ticks: number, events: SimEvent[] = []) {
+  for (let i = 0; i < ticks; i++) stepBay(bayA, state.bays[bayA.id]!, state, [factory], events);
+  return events;
+}
+
+function standAt(state: GameState, x: number, y: number, ticks: number, events: SimEvent[] = []) {
+  const inter = newInteractionState();
+  state.player.x = x + 0.5;
+  state.player.y = y + 0.5;
+  for (let i = 0; i < ticks; i++) stepInteraction(state, STATIONS, inter, events);
+  return events;
+}
+
+/** A game with the Press built and a truck waiting in bay A. */
+function waitingTruck(): GameState {
+  const state = createNewGame(grid, STATIONS);
+  state.lines.press!.built = true;
+  runBay(state, secondsToTicks(ORDERS.driveInS + 2));
+  return state;
+}
+
+describe('the loading bay', () => {
+  it('stays empty until a production line exists', () => {
+    const state = createNewGame(grid, STATIONS);
+    runBay(state, secondsToTicks(60));
+    expect(state.bays[bayA.id]!.phase).toBe('empty');
+  });
+
+  it('gets a truck ordering something the factory makes', () => {
+    const bay = waitingTruck().bays[bayA.id]!;
+    expect(bay.phase).toBe('waiting');
+    expect(bay.item).toBe('sheet');
+    expect(bay.want).toBeGreaterThanOrEqual(ORDERS.minAmount);
+    expect(bay.want).toBeLessThanOrEqual(ORDERS.maxAmount);
+  });
+
+  it('pays the order bonus when the truck is filled, then sends it off', () => {
+    const state = waitingTruck();
+    const bay = state.bays[bayA.id]!;
+    state.player.stack = Array(bay.want).fill('sheet');
+    const z = bayA.zones.load;
+    const events = standAt(state, z.x, z.y, 60);
+    expect(state.player.stack).toEqual([]);
+    expect(state.money).toBe(Math.round(PRICES.sheet * bay.want * ORDERS.bonus));
+    expect(bay.phase).toBe('leaving');
+    expect(events.some((e) => e.type === 'orderFilled')).toBe(true);
+  });
+
+  it('only takes what the truck asked for', () => {
+    const state = waitingTruck();
+    state.player.stack = ['can', 'iron', 'sheet'];
+    const z = bayA.zones.load;
+    standAt(state, z.x, z.y, 40);
+    expect(state.player.stack).toEqual(['can', 'iron']);
+    expect(state.bays[bayA.id]!.have).toBe(1);
+  });
+
+  it('lets an unfilled truck leave unpaid when its patience runs out', () => {
+    const state = waitingTruck();
+    const events = runBay(state, secondsToTicks(ORDERS.patienceS) + 1);
+    expect(state.bays[bayA.id]!.phase).toBe('leaving');
+    expect(state.money).toBe(0);
+    expect(events.some((e) => e.type === 'orderExpired')).toBe(true);
+  });
+});
+
+describe('the outlet', () => {
+  it('sells carried products at base price after the stand-still, and nothing else', () => {
+    const state = createNewGame(grid, STATIONS);
+    state.player.stack = ['sheet', 'iron', 'can'];
+    standAt(state, outlet.rect.x, outlet.rect.y, secondsToTicks(PURCHASE.delayS) - 1);
+    expect(state.player.stack).toHaveLength(3);
+    standAt(state, outlet.rect.x, outlet.rect.y, secondsToTicks(PURCHASE.delayS) + 20);
+    expect(state.player.stack).toEqual(['iron']);
+    expect(state.money).toBe(PRICES.sheet + PRICES.can);
+  });
+});
+
+describe('save v8 → v9', () => {
+  it('adds output spots and empty bays', () => {
+    const store = memoryStorage();
+    const v8 = structuredClone(createNewGame(grid, STATIONS)) as unknown as Record<string, any>;
+    delete v8.bays;
+    v8.lines.press = { built: true, progress: 3 };
+    delete v8.lines['can-line'].out;
+    store.setItem(SAVE_KEYS.main, JSON.stringify({ v: 8, savedAt: 0, state: v8 }));
+    const loaded = new SaveManager(store, isGameState).load();
+    expect(loaded).not.toBeNull();
+    const state = sanitizeState(loaded!.state, grid, STATIONS);
+    expect(state.lines.press).toEqual({ built: true, progress: 3, out: 0 });
+    expect(state.bays['bay-a']!.phase).toBe('empty');
+  });
+});

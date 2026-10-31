@@ -1,5 +1,5 @@
 /** Current save format. Bump it, and add a migration, whenever GameState changes shape. */
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 10;
 
 export type Migration = (state: unknown) => unknown;
 
@@ -83,6 +83,15 @@ export const MIGRATIONS: Migrations = {
       upgradePaid: { magnet: 0, ...(s.upgradePaid as Json) },
     };
   },
+  /** v8 → v9 (M3a): line output spots and loading bay trucks. */
+  8: (state) => {
+    const s = state as Json;
+    const lines: Json = {};
+    for (const [id, l] of Object.entries((s.lines as Json) ?? {})) lines[id] = { ...(l as Json), out: 0 };
+    return { ...s, lines, bays: {} };
+  },
+  /** v9 → v10 (M3b): employees. */
+  9: (state) => ({ ...(state as Json), employees: [], hirePaid: 0 }),
 };
 
 /** Runs every migration from `from` up to `to`. Throws if one is missing. */

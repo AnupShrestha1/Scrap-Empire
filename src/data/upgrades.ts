@@ -60,8 +60,13 @@ export const UPGRADE_EFFECTS = {
 
 /** How cash pads take payment. */
 export const PURCHASE = {
-  /** Standing still this long before paying starts, so walking across a pad costs nothing. */
-  delayS: 0.4,
+  /**
+   * Standing still this long on a sell, upgrade or build pad before anything happens, so walking across
+   * one costs nothing (the user asked for 2 s). A ring above the worker fills while waiting.
+   */
+  delayS: 2,
+  /** The drop-off pad only gives scrap back to the field, so it waits just long enough to skip walk-overs. */
+  returnDelayS: 0.4,
   /** A level is paid off in about this long, whatever it costs. */
   payS: 1.2,
   /** Pause before paying for the next level when the player stays on the pad. */

@@ -5,7 +5,7 @@ import { boxHitsSolid, isSolid, parseGrid, Tile, tileAt } from '../src/sim/grid'
 describe('parseGrid', () => {
   it('parses the M1 yard with its stations', () => {
     const grid = parseGrid(YARD, STATIONS);
-    expect(grid.width).toBe(46);
+    expect(grid.width).toBe(56);
     expect(grid.height).toBe(30);
     expect(grid.playerStart).toEqual({ x: 10.5, y: 21.5 });
     expect(tileAt(grid, 2, 3)).toBe(Tile.Fence);

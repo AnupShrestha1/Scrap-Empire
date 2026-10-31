@@ -28,6 +28,11 @@ export interface FieldPiece {
   y: number;
   /** Index into PIECE_KINDS. */
   kind: number;
+  /**
+   * Set on things the player dropped: they can't be picked up until the player has walked out of magnet
+   * range, so standing still after dropping doesn't pull everything straight back.
+   */
+  locked?: boolean;
 }
 
 export interface FieldState {
@@ -58,6 +63,21 @@ export interface LineState {
   built: boolean;
   /** Ticks into the current batch; 0 when not working. */
   progress: number;
+  /** Finished products waiting on the line's output spot. */
+  out: number;
+}
+
+export type BayPhase = 'empty' | 'arriving' | 'waiting' | 'leaving';
+const BAY_PHASES: readonly string[] = ['empty', 'arriving', 'waiting', 'leaving'] satisfies BayPhase[];
+
+/** A buyer truck's order in one loading bay lane. */
+export interface BayState {
+  phase: BayPhase;
+  /** Ticks left in the phase (patience while waiting). */
+  timer: number;
+  item: ItemId | null;
+  want: number;
+  have: number;
 }
 
 export type TruckPhase = 'away' | 'arriving' | 'unloading' | 'waiting' | 'leaving';
@@ -69,6 +89,15 @@ export interface TruckState {
   timer: number;
   /** Items still on the truck. */
   load: number;
+}
+
+/** A hired helper (see systems/staff.ts). Only position and load are saved; plans are rebuilt. */
+export interface Employee {
+  id: number;
+  x: number;
+  y: number;
+  facing: Facing;
+  stack: ItemId[];
 }
 
 /** Everything that gets saved. Plain data only, so it serialises to JSON as-is. */
@@ -94,6 +123,10 @@ export interface GameState {
   lines: Record<string, LineState>;
   /** Cash already paid towards building each unbuilt line. */
   buildPaid: Record<string, number>;
+  bays: Record<string, BayState>;
+  employees: Employee[];
+  /** Cash already paid towards the next hire. */
+  hirePaid: number;
 }
 
 export function secondsToTicks(seconds: number): number {
@@ -119,6 +152,9 @@ export function createNewGame(grid: Grid, stations: readonly StationDef[]): Game
     bins: {},
     lines: {},
     buildPaid: {},
+    bays: {},
+    employees: [],
+    hirePaid: 0,
   };
   return sanitizeState(state, grid, stations);
 }
@@ -144,8 +180,29 @@ export function isGameState(value: unknown): value is GameState {
     isCount(truck.timer) &&
     isCount(truck.load) &&
     isField(value.field) &&
+    isCount(value.hirePaid) &&
+    Array.isArray(value.employees) &&
+    value.employees.every(
+      (e: unknown) =>
+        isRecord(e) &&
+        isCount(e.id) &&
+        Number.isFinite(e.x) &&
+        Number.isFinite(e.y) &&
+        FACINGS.includes(e.facing as string) &&
+        Array.isArray(e.stack) &&
+        e.stack.every(isItemId),
+    ) &&
     isMapOf(value.bins, (b) => isCount(b.count)) &&
-    isMapOf(value.lines, (l) => typeof l.built === 'boolean' && isCount(l.progress)) &&
+    isMapOf(value.lines, (l) => typeof l.built === 'boolean' && isCount(l.progress) && isCount(l.out)) &&
+    isMapOf(
+      value.bays,
+      (b) =>
+        BAY_PHASES.includes(b.phase as string) &&
+        isCount(b.timer) &&
+        (b.item === null || isItemId(b.item)) &&
+        isCount(b.want) &&
+        isCount(b.have),
+    ) &&
     isRecord(value.buildPaid) &&
     Object.values(value.buildPaid).every(isCount) &&
     isMapOf(
@@ -163,6 +220,7 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
   const processors: Record<string, ProcessorState> = {};
   const bins: Record<string, BinState> = {};
   const lines: Record<string, LineState> = {};
+  const bays: Record<string, BayState> = {};
   const buildPaid: Record<string, number> = {};
   for (const s of stations) {
     switch (s.kind) {
@@ -186,10 +244,15 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
         bins[s.id] = { count: state.bins[s.id]?.count ?? 0 };
         break;
       case 'cashPad':
+      case 'outlet':
+      case 'staffHut':
+        break;
+      case 'bay':
+        bays[s.id] = state.bays[s.id] ?? { phase: 'empty', timer: 1, item: null, want: 0, have: 0 };
         break;
       case 'factory':
         for (const line of s.lines) {
-          lines[line.id] = state.lines[line.id] ?? { built: false, progress: 0 };
+          lines[line.id] = state.lines[line.id] ?? { built: false, progress: 0, out: 0 };
           buildPaid[line.id] = state.buildPaid[line.id] ?? 0;
         }
         break;
@@ -198,6 +261,7 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
   state.processors = processors;
   state.bins = bins;
   state.lines = lines;
+  state.bays = bays;
   state.buildPaid = buildPaid;
 
   const p = state.player;
@@ -218,7 +282,8 @@ function isField(value: unknown): boolean {
       Number.isFinite(p.x) &&
       Number.isFinite(p.y) &&
       isCount(p.kind) &&
-      (p.kind as number) < PIECE_KINDS.length,
+      (p.kind as number) < PIECE_KINDS.length &&
+      (p.locked === undefined || typeof p.locked === 'boolean'),
   );
 }
 

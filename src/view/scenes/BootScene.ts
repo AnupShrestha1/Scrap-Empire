@@ -2,9 +2,9 @@ import Phaser from 'phaser';
 import { ITEM_IDS } from '../../data/items';
 import { STATIONS } from '../../data/layout';
 import { padsFor } from '../world/pads';
-import { BOOTH_FRAME, drawBooth, drawLampPost, drawTree, LAMP_POST_FRAME, TREE_FRAME, TREE_VARIANTS } from '../art/nature';
+import { BOOTH_FRAME, drawBooth, drawHut, drawLampPost, drawTree, HUT_FRAME, LAMP_POST_FRAME, TREE_FRAME, TREE_VARIANTS } from '../art/nature';
 import { drawCrate, drawFencePost, FENCE_RUNS, OBJECT_SIZE, type FenceDir } from '../art/objects';
-import { drawPlayerBack, drawPlayerFront, PLAYER_SIZE } from '../art/player';
+import { drawPlayerBack, drawPlayerFront, drawStaffBack, drawStaffFront, PLAYER_SIZE } from '../art/player';
 import {
   BIN_FRAME,
   BIN_LEVELS,
@@ -17,6 +17,7 @@ import {
   drawLamp,
   drawShredder,
   drawTruck,
+  drawBoxTruck,
   ITEM_FRAME,
   LAMP_FRAME,
   SHREDDER_FRAME,
@@ -40,6 +41,9 @@ export class BootScene extends Phaser.Scene {
     const atlas = new AtlasBuilder(2048, 1024);
     atlas.add(FRAME.playerFront, PLAYER_SIZE.w, PLAYER_SIZE.h, drawPlayerFront);
     atlas.add(FRAME.playerBack, PLAYER_SIZE.w, PLAYER_SIZE.h, drawPlayerBack);
+    atlas.add(FRAME.staffFront, PLAYER_SIZE.w, PLAYER_SIZE.h, drawStaffFront);
+    atlas.add(FRAME.staffBack, PLAYER_SIZE.w, PLAYER_SIZE.h, drawStaffBack);
+    atlas.add(FRAME.hut, HUT_FRAME.w, HUT_FRAME.h, drawHut);
     atlas.add(FRAME.crate, OBJECT_SIZE.crate.w, OBJECT_SIZE.crate.h, drawCrate);
     atlas.add(FRAME.fencePost, OBJECT_SIZE.fencePost.w, OBJECT_SIZE.fencePost.h, drawFencePost);
     for (const [dir, draw] of Object.entries(FENCE_RUNS) as [FenceDir, (typeof FENCE_RUNS)[FenceDir]][]) {
@@ -59,6 +63,7 @@ export class BootScene extends Phaser.Scene {
     }
     atlas.add(FRAME.truck(false), TRUCK_FRAME.w, TRUCK_FRAME.h, drawTruck(false));
     atlas.add(FRAME.truck(true), TRUCK_FRAME.w, TRUCK_FRAME.h, drawTruck(true));
+    atlas.add(FRAME.boxTruck, TRUCK_FRAME.w, TRUCK_FRAME.h, drawBoxTruck);
     for (const item of ITEM_IDS) atlas.add(FRAME.item(item), ITEM_FRAME.w, ITEM_FRAME.h, drawItem(item));
     for (const pad of padsFor(STATIONS)) {
       const size = padFrame(pad.rect.w, pad.rect.h);

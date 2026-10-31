@@ -6,7 +6,7 @@ import type { SimEvent } from '../src/sim/events';
 import { parseGrid } from '../src/sim/grid';
 import { createNewGame, secondsToTicks, type GameState } from '../src/sim/state';
 import type { DumpDef, ProcessorDef, StationDef } from '../src/sim/stations';
-import { fieldUnits, stepField } from '../src/sim/systems/field';
+import { dropStack, fieldUnits, stepField } from '../src/sim/systems/field';
 import { newInteractionState, stepInteraction } from '../src/sim/systems/interaction';
 import { processorStatus, stepProcessor, trayTotal } from '../src/sim/systems/processing';
 import { stepSupplier } from '../src/sim/systems/supplier';
@@ -136,7 +136,7 @@ describe('the dump site', () => {
   it('takes scrap back on the drop pad, but only after standing still', () => {
     const state = emptyGame();
     state.player.stack = ['scrap', 'scrap', 'iron'];
-    standIn(state, 0, secondsToTicks(PURCHASE.delayS) - 1, [], 3);
+    standIn(state, 0, secondsToTicks(PURCHASE.returnDelayS) - 1, [], 3);
     expect(state.player.stack).toHaveLength(3);
     standIn(state, 0, secondsToTicks(3), [], 3);
     expect(state.player.stack).toEqual(['iron']);
@@ -215,7 +215,7 @@ describe('getting unstuck', () => {
 });
 
 describe('processing', () => {
-  it('turns scrap into exactly 1 iron and 0.3 aluminium each, over time', () => {
+  it('turns scrap into exactly the recipe outputs, over time', () => {
     const state = emptyGame();
     const machine = state.processors.shredder!;
     machine.hopper = 10;
@@ -225,8 +225,8 @@ describe('processing', () => {
       iron += machine.tray.iron;
       machine.tray.iron = 0;
     }
-    expect(iron).toBe(10);
-    expect(machine.tray.aluminium).toBe(3);
+    expect(iron).toBe(Math.floor(10 * SHREDDER.outputs.iron! + 1e-9));
+    expect(machine.tray.aluminium).toBe(Math.floor(10 * SHREDDER.outputs.aluminium! + 1e-9));
   });
 
   it('blocks with a full tray and resumes once it is emptied', () => {
@@ -234,11 +234,54 @@ describe('processing', () => {
     const machine = state.processors.shredder!;
     machine.tray.iron = SHREDDER.tray;
     machine.hopper = 1;
+    // Enough iron carried over that this scrap finishes a whole one, whatever the recipe's share.
+    machine.carry.iron = 1 - SHREDDER.outputs.iron! + 0.01;
     for (let i = 0; i < secondsToTicks(SHREDDER.cycleS) + 5; i++) stepProcessor(SHRED, machine);
     expect(processorStatus(SHRED, machine)).toBe('blocked');
     machine.tray.iron = 0;
     stepProcessor(SHRED, machine);
     expect(machine.tray.iron).toBe(1);
     expect(trayTotal(machine)).toBe(1);
+  });
+});
+
+describe('the Drop button', () => {
+  it('drops everything carried around the player, then lets it be picked up again', () => {
+    const state = emptyGame();
+    state.player.x = 1.5;
+    state.player.y = 1.5;
+    state.player.stack = ['scrap', 'iron', 'iron'];
+    const events: SimEvent[] = [];
+    expect(dropStack(state, grid, events)).toBe(true);
+    expect(state.player.stack).toEqual([]);
+    expect(state.field.pieces).toHaveLength(3);
+    expect(events).toContainEqual({ type: 'dropped', count: 3 });
+    for (const p of state.field.pieces) expect(Math.hypot(p.x - 1.5, p.y - 1.5)).toBeLessThanOrEqual(FIELD.dropSpread + 1e-9);
+
+    // Standing still, the magnet leaves them alone however long the player waits...
+    for (let i = 0; i < 200; i++) stepField(state, DUMP, DT, []);
+    expect(state.player.stack).toEqual([]);
+    // ...until the player walks out of reach and comes back; then they're collected as what they were.
+    state.player.x = 8.5;
+    stepField(state, DUMP, DT, []);
+    state.player.x = 1.5;
+    for (let i = 0; i < 40; i++) stepField(state, DUMP, DT, []);
+    expect([...state.player.stack].sort()).toEqual(['iron', 'iron', 'scrap']);
+  });
+
+  it('never drops anything inside a wall or machine', () => {
+    const state = emptyGame();
+    // Right next to the shredder (solid at x 4..5, y 0..1).
+    state.player.x = 3.7;
+    state.player.y = 0.5;
+    state.player.stack = Array(CARRY.capacity).fill('scrap');
+    dropStack(state, grid, []);
+    for (const p of state.field.pieces) expect(p.x < 4 || p.x >= 5 || p.y >= 1).toBe(true);
+  });
+
+  it('does nothing with empty hands', () => {
+    const state = emptyGame();
+    expect(dropStack(state, grid, [])).toBe(false);
+    expect(state.field.pieces).toEqual([]);
   });
 });

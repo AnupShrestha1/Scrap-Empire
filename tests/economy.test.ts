@@ -50,17 +50,22 @@ describe('shredder Yield and Extraction', () => {
   it('Yield raises every output by 10% per level, exactly over time', () => {
     const state = createNewGame(grid, STATIONS);
     state.upgrades.shredderYield = 2;
-    expect(shred(state, 100)).toEqual({ iron: 120, aluminium: 36, copper: 0 });
+    const out = SHREDDER.outputs;
+    const expected = (share = 0) => Math.floor(100 * share * 1.2 + 1e-9);
+    expect(shred(state, 100)).toEqual({ iron: expected(out.iron), aluminium: expected(out.aluminium), copper: expected(out.copper) });
   });
 
   it('Extraction adds copper, which Yield also boosts', () => {
     const state = createNewGame(grid, STATIONS);
+    const base = SHREDDER.outputs.copper ?? 0;
     state.upgrades.extraction = 1;
-    expect(shred(state, 100).copper).toBe(Math.round(100 * UPGRADE_EFFECTS.copperBase));
+    expect(shred(state, 100).copper).toBe(Math.floor(100 * (base + UPGRADE_EFFECTS.copperBase) + 1e-9));
     state.upgrades.extraction = 2;
     state.upgrades.shredderYield = 1;
-    const perScrap = (UPGRADE_EFFECTS.copperBase + UPGRADE_EFFECTS.copperPerLevel) * 1.1;
-    expect(shred(state, 100).copper).toBe(Math.floor(100 * perScrap + 1e-9));
+    const perScrap = (base + UPGRADE_EFFECTS.copperBase + UPGRADE_EFFECTS.copperPerLevel) * 1.1;
+    const made = shred(state, 100).copper;
+    // Fractions carry between runs, so allow one either way.
+    expect(Math.abs(made - 100 * perScrap)).toBeLessThanOrEqual(1);
   });
 });
 
@@ -99,9 +104,8 @@ describe('business level', () => {
     state.player.x = padAt('bin-iron').x + 0.5;
     state.player.y = 7.5; // the iron bin's sell pad
     const sim = new Simulation(state, grid, STATIONS, 'dump');
-    sim.advance(250);
-    sim.advance(250);
-    sim.advance(250);
+    // Past the 2 s stand-still, then a few sales.
+    for (let i = 0; i < 12; i++) sim.advance(250);
     const events: SimEvent[] = [];
     sim.drainEvents(events);
     expect(events).toContainEqual({ type: 'levelUp', level: 2 });

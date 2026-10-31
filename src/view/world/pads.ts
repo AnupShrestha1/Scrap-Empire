@@ -36,8 +36,16 @@ export function padsFor(stations: readonly StationDef[]): PadSpec[] {
       // Cash pads label themselves with the live price (see CashPadView).
       pads.push({ station: s.id, zone: 'buy', rect: s.zones.buy, kind: 'buy' });
     } else if (s.kind === 'factory') {
-      // Shown only while there are lines left to build (see FactoryView).
+      // Shown only while there are lines left to build, and once each line is built (see FactoryView).
       pads.push({ station: s.id, zone: 'build', rect: s.zones.build, kind: 'buy', dynamic: true });
+      for (const line of s.lines) pads.push({ station: line.id, zone: 'output', rect: line.output, kind: 'pickup', dynamic: true });
+    } else if (s.kind === 'bay') {
+      pads.push({ station: s.id, zone: 'load', rect: s.zones.load, kind: 'dropoff' });
+    } else if (s.kind === 'staffHut') {
+      // Labelled with the live price by StaffHutView.
+      pads.push({ station: s.id, zone: 'hire', rect: s.zones.hire, kind: 'buy' });
+    } else if (s.kind === 'outlet') {
+      pads.push({ station: s.id, zone: 'sell', rect: s.zones.sell, kind: 'sell', label: t('outlet.title') });
     }
   }
   return pads;

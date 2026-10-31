@@ -2,10 +2,12 @@ import { SIM, TICK_MS } from '../config';
 import type { ProcessorStatus, SimEvent } from './events';
 import type { Grid } from './grid';
 import type { GameState } from './state';
-import type { BinDef, DumpDef, FactoryDef, LineDef, ProcessorDef, StationDef } from './stations';
-import { stepField } from './systems/field';
+import type { BayDef, BinDef, DumpDef, FactoryDef, LineDef, ProcessorDef, StationDef } from './stations';
+import { stepBay } from './systems/bays';
+import { stepStaff, type Brain, type StaffWorld } from './systems/staff';
+import { dropStack, stepField } from './systems/field';
 import { stepLine } from './systems/manufacturing';
-import { newInteractionState, stepInteraction, type InteractionState } from './systems/interaction';
+import { newInteractionState, padCharge, stepInteraction, type InteractionState } from './systems/interaction';
 import { stepPlayer } from './systems/player';
 import { processorCycleTicks, processorOutputs } from './effective';
 import { businessLevel } from '../data/balance';
@@ -33,12 +35,18 @@ export class Simulation {
 
   private readonly move: Vec2 = { x: 0, y: 0 };
   private accumulator = 0;
+  /** Set by requestDrop; applied at the start of the next tick. */
+  private dropRequested = false;
   private readonly events: SimEvent[] = [];
   private readonly interaction: InteractionState = newInteractionState();
   private readonly statuses = new Map<string, ProcessorStatus>();
   private readonly dump: DumpDef;
   private readonly processorDefs: readonly ProcessorDef[];
   private readonly factories: readonly FactoryDef[];
+  private readonly bayDefs: readonly BayDef[];
+  private readonly staffWorld: StaffWorld;
+  /** Employees' current plans, by employee id; not saved. */
+  readonly brains = new Map<number, Brain>();
   /** Bin definitions by id, for machines that pull from them. */
   readonly binDefs: ReadonlyMap<string, BinDef>;
 
@@ -52,7 +60,16 @@ export class Simulation {
     this.dump = dump;
     this.processorDefs = stations.filter((s): s is ProcessorDef => s.kind === 'processor');
     this.factories = stations.filter((s): s is FactoryDef => s.kind === 'factory');
+    this.bayDefs = stations.filter((s): s is BayDef => s.kind === 'bay');
     this.binDefs = new Map(stations.filter((s): s is BinDef => s.kind === 'bin').map((b) => [b.id, b]));
+    this.staffWorld = {
+      grid,
+      dump,
+      shredder: this.processorDefs[0]!,
+      bins: [...this.binDefs.values()],
+      factories: this.factories,
+      bays: this.bayDefs,
+    };
     for (const def of this.processorDefs) {
       this.statuses.set(def.id, processorStatus(def, state.processors[def.id]!, processorCycleTicks(def, state)));
     }
@@ -62,6 +79,16 @@ export class Simulation {
   setMoveInput(x: number, y: number): void {
     this.move.x = x;
     this.move.y = y;
+  }
+
+  /** Progress (0..1) of the stand-still on a sell, upgrade or build pad, for the countdown ring. */
+  get padCharge(): number | undefined {
+    return padCharge(this.interaction);
+  }
+
+  /** The Drop button: drop everything carried on the next tick. */
+  requestDrop(): void {
+    this.dropRequested = true;
   }
 
   /** Runs as many whole ticks as `elapsedMs` of real time covers. Returns the number of ticks run. */
@@ -108,6 +135,10 @@ export class Simulation {
     this.prevPlayer.x = p.x;
     this.prevPlayer.y = p.y;
     let changed = stepPlayer(p, this.move, this.grid, TICK_MS / 1000);
+    if (this.dropRequested) {
+      this.dropRequested = false;
+      changed = dropStack(state, this.grid, events) || changed;
+    }
     changed = stepField(state, this.dump, TICK_MS / 1000, events) || changed;
     changed = stepInteraction(state, this.stations, this.interaction, events) || changed;
     changed = stepSupplier(state, this.dump, events) || changed;
@@ -123,8 +154,12 @@ export class Simulation {
     }
     for (const factory of this.factories) {
       for (const line of factory.lines) {
-        changed = stepLine(factory, line, state.lines[line.id]!, this.binDefs, state, events) || changed;
+        changed = stepLine(line, state.lines[line.id]!, this.binDefs, state, events) || changed;
       }
+    }
+    changed = stepStaff(state, this.staffWorld, this.brains, events) || changed;
+    for (const bay of this.bayDefs) {
+      changed = stepBay(bay, state.bays[bay.id]!, state, this.factories, events) || changed;
     }
     const levelAfter = businessLevel(state.earned);
     if (levelAfter > levelBefore) events.push({ type: 'levelUp', level: levelAfter });

@@ -3,6 +3,7 @@ import { PIECE_KINDS } from '../../data/scrap';
 import { along, isoBox } from './isoshapes';
 import { PALETTE as C } from './palette';
 import { pixelArt, type Pixels } from './pixel';
+import { drawProductIcon } from './factory';
 
 /** Frame sizes: small pieces fit a third of a tile, big ones most of a tile. The origin is the piece's ground point. */
 export const SMALL_PIECE_FRAME = { w: 36, h: 28, originY: 22 / 28 } as const;
@@ -72,7 +73,25 @@ const DRAW: Record<string, (p: Pixels) => void> = {
   },
 };
 
+const INGOT: Record<string, { top: string; side: string }> = {
+  iron: { top: C.iron, side: C.ironDark },
+  aluminium: { top: C.aluminium, side: C.aluminiumDark },
+  copper: { top: C.copper, side: C.copperDark },
+};
+
+/** Something the player dropped: an ingot or a product, lying on the ground. */
+function drawDropped(item: string) {
+  return (p: Pixels) => {
+    shadow(p, 9, 11, 6);
+    const g: [number, number] = [9, 6];
+    const ingot = INGOT[item];
+    if (ingot) isoBox(p, g, 0.5, 0.25, 3, { top: ingot.top, left: ingot.side, right: ingot.side });
+    else drawProductIcon(p, g, item as 'sheet' | 'can');
+  };
+}
+
 export function drawPiece(kind: number) {
-  return pixelArt(DRAW[PIECE_KINDS[kind]!.id]!);
+  const k = PIECE_KINDS[kind]!;
+  return pixelArt(k.item ? drawDropped(k.item) : DRAW[k.id]!);
 }
 

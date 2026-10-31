@@ -11,7 +11,7 @@ import { FRAME, SCENE, TEX } from '../keys';
 import { placeDecor } from '../world/decor';
 import { Labels } from '../world/labels';
 import { placePads } from '../world/pads';
-import { CarriedStackView, createStationViews, HintArrowView, type StationViews } from '../world/stationViews';
+import { CarriedStackView, createStationViews, HintArrowView, StaffView, type StationViews } from '../world/stationViews';
 import { itemName, t, upgradeName } from '../../i18n';
 
 /**
@@ -47,6 +47,9 @@ export class WorldScene extends Phaser.Scene {
   private stations!: StationViews;
   private carried!: CarriedStackView;
   private hint!: HintArrowView;
+  private staff!: StaffView;
+  /** Fills above the worker while they wait on a sell, upgrade or build pad. */
+  private charge!: Phaser.GameObjects.Graphics;
   private readonly simEvents: SimEvent[] = [];
   /** Cash earned per station this frame, shown as one floating "+$" each. */
   private readonly sales = new Map<string, number>();
@@ -74,10 +77,12 @@ export class WorldScene extends Phaser.Scene {
 
     this.labels = new Labels(this);
     placePads(this, this.proj, this.labels, stations);
-    this.stations = createStationViews(this, this.proj, this.labels, stations, () => this.player ?? { x: 0, y: 0 });
+    this.staff = new StaffView(this, this.proj);
+    this.stations = createStationViews(this, this.proj, this.labels, stations, (x, y) => this.nearestWorker(x, y));
     this.player = this.add.image(0, 0, TEX.atlas, FRAME.playerFront).setOrigin(0.5, FEET_Y / PLAYER_SIZE.h);
     this.carried = new CarriedStackView(this, this.labels);
     this.hint = new HintArrowView(this, this.proj, stations);
+    this.charge = this.add.graphics().setDepth(1e7 - 3);
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, this.proj.width, this.proj.height);
@@ -130,7 +135,18 @@ export class WorldScene extends Phaser.Scene {
     this.player.setFrame(look.frame).setFlipX(look.flip).setPosition(at.x, at.y - bob).setDepth(depth);
     this.carried.update(sim, at.x, at.y - bob, depth);
 
+    this.charge.clear();
+    const charge = sim.padCharge;
+    if (charge !== undefined) {
+      const radius = 13;
+      this.charge.setPosition(at.x + 34, at.y - 70);
+      this.charge.fillStyle(0x13243a, 0.85).fillCircle(0, 0, radius + 3);
+      this.charge.lineStyle(5, 0xffd76a, 1).beginPath();
+      this.charge.arc(0, 0, radius, -Math.PI / 2, -Math.PI / 2 + charge * Math.PI * 2).strokePath();
+    }
+
     for (const view of this.stations.views) view.update(sim, timeMs);
+    this.staff.update(sim, elapsedMs);
   }
 
   /** Turns simulation events into feedback: sounds, toasts, flashes and floating cash. */
@@ -153,6 +169,9 @@ export class WorldScene extends Phaser.Scene {
         }
         break;
       }
+      case 'dropped':
+        sfx.play('drop');
+        break;
       case 'processed':
         sfx.play('chunk');
         break;
@@ -195,6 +214,27 @@ export class WorldScene extends Phaser.Scene {
         toasts.show(t('toast.levelUp', { level: event.level }), 'good');
         sfx.play('objective');
         break;
+      case 'hired':
+        toasts.show(t('toast.hired', { count: event.count }), 'good');
+        sfx.play('upgrade');
+        break;
+      case 'orderArrived':
+        toasts.show(t('toast.orderArrived', { want: event.want, item: itemName(event.item) }), 'info');
+        sfx.play('horn');
+        break;
+      case 'orderFilled': {
+        toasts.show(t('toast.orderFilled', { value: event.value }), 'good');
+        sfx.play('upgrade');
+        const bay = this.ctx.sim.stations.find((s) => s.id === event.bay);
+        if (bay) {
+          const at = toScreen(this.proj, bay.rect.x + 1, bay.rect.y + 0.5);
+          this.labels.floating(`+$${event.value}`, at.x, at.y - 70);
+        }
+        break;
+      }
+      case 'orderExpired':
+        toasts.show(t('toast.orderExpired'), 'warn');
+        break;
       case 'truckArriving':
         sfx.play('horn');
         break;
@@ -212,6 +252,20 @@ export class WorldScene extends Phaser.Scene {
     const sell = def.kind === 'bin' ? def.zones.sell : def.rect;
     const at = toScreen(this.proj, sell.x + sell.w / 2, sell.y + sell.h / 2);
     this.labels.floating(`+$${value}`, at.x, at.y - 50);
+  }
+
+  /** The worker (player or employee) closest to screen point (x, y): where a collected piece flies to. */
+  private nearestWorker(x: number, y: number): { x: number; y: number } {
+    let best = { x: this.player.x, y: this.player.y };
+    let bestD = Math.hypot(best.x - x, best.y - y);
+    for (const p of this.staff.positions()) {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < bestD) {
+        best = p;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   private followPlayer(elapsedMs: number): void {

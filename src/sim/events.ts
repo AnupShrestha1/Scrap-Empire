@@ -19,6 +19,11 @@ export type SimEvent =
   | { type: 'needCash'; amount: number }
   | { type: 'built'; station: string }
   | { type: 'pickedUp'; kind: number; units: number; x: number; y: number }
+  | { type: 'dropped'; count: number }
+  | { type: 'orderArrived'; bay: string; item: ItemId; want: number }
+  | { type: 'orderFilled'; bay: string; item: ItemId; value: number }
+  | { type: 'orderExpired'; bay: string }
+  | { type: 'hired'; count: number }
   | { type: 'locked'; level?: number; line?: string }
   | { type: 'levelUp'; level: number }
   | { type: 'objectiveDone'; objective: string; reward: number }

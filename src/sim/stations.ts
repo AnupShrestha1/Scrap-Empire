@@ -55,6 +55,8 @@ export interface LineDef {
   requiresLevel?: number;
   /** The upgrade that speeds this line up. */
   speedUpgrade?: UpgradeId;
+  /** Where its products come out, to be picked up. */
+  output: Rect;
 }
 
 /**
@@ -67,6 +69,25 @@ export interface FactoryDef extends StationBase {
   zones: { build: Rect };
 }
 
+/** A loading bay lane: buyer trucks back in to `lane.parkX` on `lane.row`; load them from `zones.load`. */
+export interface BayDef extends StationBase {
+  kind: 'bay';
+  lane: { row: number; parkX: number; startX: number };
+  zones: { load: Rect };
+}
+
+/** Sells carried products outright, at the base price. */
+export interface OutletDef extends StationBase {
+  kind: 'outlet';
+  zones: { sell: Rect };
+}
+
+/** The staff hut, where employees are hired on the pad in front. */
+export interface StaffHutDef extends StationBase {
+  kind: 'staffHut';
+  zones: { hire: Rect };
+}
+
 /** A walkable pad where the player pays in cash for an upgrade. Not solid. */
 export interface CashPadDef extends StationBase {
   kind: 'cashPad';
@@ -74,14 +95,18 @@ export interface CashPadDef extends StationBase {
   zones: { buy: Rect };
 }
 
-export type StationDef = DumpDef | ProcessorDef | BinDef | CashPadDef | FactoryDef;
+export type StationDef = DumpDef | ProcessorDef | BinDef | CashPadDef | FactoryDef | BayDef | OutletDef | StaffHutDef;
 
 export type ZoneHit =
   | { station: DumpDef; zone: 'return' }
   | { station: ProcessorDef; zone: 'input' | 'output' }
   | { station: BinDef; zone: 'deposit' | 'sell' }
   | { station: CashPadDef; zone: 'buy' }
-  | { station: FactoryDef; zone: 'build' };
+  | { station: FactoryDef; zone: 'build' }
+  | { station: FactoryDef; zone: 'lineOutput'; line: LineDef }
+  | { station: BayDef; zone: 'load' }
+  | { station: OutletDef; zone: 'sell' }
+  | { station: StaffHutDef; zone: 'hire' };
 
 export function inRect(r: Rect, x: number, y: number): boolean {
   return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
@@ -108,6 +133,16 @@ export function zoneAt(stations: readonly StationDef[], x: number, y: number): Z
         break;
       case 'factory':
         if (inRect(s.zones.build, x, y)) return { station: s, zone: 'build' };
+        for (const line of s.lines) if (inRect(line.output, x, y)) return { station: s, zone: 'lineOutput', line };
+        break;
+      case 'bay':
+        if (inRect(s.zones.load, x, y)) return { station: s, zone: 'load' };
+        break;
+      case 'outlet':
+        if (inRect(s.zones.sell, x, y)) return { station: s, zone: 'sell' };
+        break;
+      case 'staffHut':
+        if (inRect(s.zones.hire, x, y)) return { station: s, zone: 'hire' };
         break;
     }
   }

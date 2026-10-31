@@ -1,11 +1,11 @@
-import { PRICES } from '../../data/balance';
+import { LINE_OUTPUT } from '../../data/balance';
 import { ITEM_IDS, type ItemId } from '../../data/items';
 import type { SimEvent } from '../events';
 import { lineBatchTicks } from '../effective';
 import type { BinState, GameState, LineState } from '../state';
 import type { BinDef, FactoryDef, LineDef } from '../stations';
 
-export type LineStatus = 'unbuilt' | 'idle' | 'starved' | 'processing';
+export type LineStatus = 'unbuilt' | 'idle' | 'starved' | 'processing' | 'blocked';
 
 /** Batch time after the line's speed upgrade. */
 export function batchTicks(line: LineDef, state: GameState): number {
@@ -42,11 +42,11 @@ export function nextUnbuiltLine(factory: FactoryDef, state: GameState): LineDef 
 }
 
 /**
- * One tick of a production line: when idle, pull a batch of inputs from its feed bins through the chute;
- * when the batch time is up, the product is sold on the spot. Returns true if anything changed.
+ * One tick of a production line: when idle with room on its output spot, pull a batch of inputs straight
+ * from its feed bins; when the batch time is up, the product lands on the output spot to be collected.
+ * Returns true if anything changed.
  */
 export function stepLine(
-  factory: FactoryDef,
   line: LineDef,
   st: LineState,
   binDefs: ReadonlyMap<string, BinDef>,
@@ -55,6 +55,7 @@ export function stepLine(
 ): boolean {
   if (!st.built) return false;
   if (st.progress === 0) {
+    if (st.out >= LINE_OUTPUT) return false;
     if (missingInput(line, binDefs, state.bins)) return false;
     for (const item of ITEM_IDS) {
       const need = line.recipe.inputs[item];
@@ -69,12 +70,8 @@ export function stepLine(
   st.progress++;
   if (st.progress < batchTicks(line, state)) return true;
   st.progress = 0;
-  const item = line.recipe.output;
-  const value = PRICES[item];
-  state.money += value;
-  state.earned += value;
-  events.push({ type: 'processed', station: line.id, item });
-  events.push({ type: 'sold', station: factory.id, item, value });
+  st.out++;
+  events.push({ type: 'processed', station: line.id, item: line.recipe.output });
   return true;
 }
 
@@ -86,5 +83,6 @@ export function lineStatus(
 ): LineStatus {
   if (!st.built) return 'unbuilt';
   if (st.progress > 0) return 'processing';
+  if (st.out >= LINE_OUTPUT) return 'blocked';
   return missingInput(line, binDefs, bins) ? 'starved' : 'idle';
 }

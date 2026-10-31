@@ -7,6 +7,7 @@ import type { Simulation } from '../../sim/simulation';
 import { secondsToTicks } from '../../sim/state';
 import type { BinDef, DumpDef, ProcessorDef, StationDef } from '../../sim/stations';
 import { pieceFrame } from '../art/scrap';
+import { FEET_Y, PLAYER_SIZE } from '../art/player';
 import { processorStatus, trayTotal } from '../../sim/systems/processing';
 import { binCapacity, processorCycleTicks } from '../../sim/effective';
 import { currentObjective } from '../../sim/systems/objectives';
@@ -22,7 +23,10 @@ import { LABEL_DEPTH, type Labels } from './labels';
 import { FACTORY_FRAME, LINE_LAMP_HEIGHT, lineWindowPoint } from '../art/factory';
 import { ART_SCALE } from '../art/pixel';
 import { padFrame } from '../art/stations';
-import type { FactoryDef } from '../../sim/stations';
+import type { BayDef, FactoryDef, StaffHutDef } from '../../sim/stations';
+import { HUT_FRAME } from '../art/nature';
+import { STAFF } from '../../data/balance';
+import { LINE_OUTPUT, ORDERS } from '../../data/balance';
 import { batchTicks, lineStatus, missingInput, nextUnbuiltLine } from '../../sim/systems/manufacturing';
 
 /** Something drawn from simulation state every frame. */
@@ -61,7 +65,7 @@ class FieldView implements View {
     private readonly proj: IsoProjection,
     labels: Labels,
     private readonly def: DumpDef,
-    private readonly playerAt: () => { x: number; y: number },
+    private readonly collectorAt: (x: number, y: number) => { x: number; y: number },
   ) {
     const top = toScreen(proj, def.rect.x + def.rect.w / 2, def.rect.y);
     this.label = labels.add(13, '#ffe0b0').setPosition(top.x, top.y - 4);
@@ -92,7 +96,7 @@ class FieldView implements View {
     for (const [id, sprite] of this.sprites) {
       if (seen.has(id)) continue;
       this.sprites.delete(id);
-      const to = this.playerAt();
+      const to = this.collectorAt(sprite.x, sprite.y);
       this.scene.tweens.killTweensOf(sprite);
       this.scene.tweens.add({
         targets: sprite,
@@ -321,6 +325,8 @@ interface LineIndicators {
   lamp: Phaser.GameObjects.Image;
   ring: Phaser.GameObjects.Graphics;
   note: Phaser.GameObjects.Text;
+  pad: Phaser.GameObjects.Image;
+  products: Phaser.GameObjects.Image[];
 }
 
 /**
@@ -343,14 +349,28 @@ class FactoryView implements View {
     const roof = toScreen(proj, x + w / 2, y + h / 2);
     this.title = labels.add(13, '#ffd0c8').setPosition(roof.x, roof.y - 58);
 
-    def.lines.forEach((_line, i) => {
+    def.lines.forEach((line, i) => {
       const [gx, gy] = lineWindowPoint(def.rect, i);
       const at = toScreen(proj, gx, gy);
       const lampY = at.y - LINE_LAMP_HEIGHT * ART_SCALE;
       const lamp = scene.add.image(at.x, lampY, TEX.atlas, FRAME.lamp('idle')).setDepth(LABEL_DEPTH - 2);
       const ring = scene.add.graphics().setPosition(at.x, lampY).setDepth(LABEL_DEPTH - 2);
       const note = labels.add(11, '#ff8a7a').setPosition(at.x, lampY - 12);
-      this.lines.push({ lamp, ring, note });
+      // The output spot on the bay side, with finished products stacking up on it.
+      const o = line.output;
+      const pad = placeFrame(scene, proj, FRAME.pad(line.id, 'output'), o.x + o.w, o.y + o.h, padFrame(o.w, o.h), -0.5);
+      const spot = toScreen(proj, o.x + o.w / 2, o.y + o.h / 2);
+      const products: Phaser.GameObjects.Image[] = [];
+      for (let k = 0; k < LINE_OUTPUT; k++) {
+        products.push(
+          scene.add
+            .image(spot.x + ((k % 2) * 2 - 1) * 6, spot.y - Math.floor(k / 2) * ICON_STEP, TEX.atlas, FRAME.item(line.recipe.output))
+            .setOrigin(0.5, 1)
+            .setDepth(depthAt(o.x + o.w / 2, o.y + o.h / 2) + k * 0.01)
+            .setVisible(false),
+        );
+      }
+      this.lines.push({ lamp, ring, note, pad, products });
     });
 
     const b = def.zones.build;
@@ -370,7 +390,11 @@ class FactoryView implements View {
       const st = state.lines[line.id]!;
       const ind = this.lines[i]!;
       const status = lineStatus(line, st, binDefs, state.bins);
-      ind.lamp.setVisible(status !== 'unbuilt').setFrame(FRAME.lamp(status === 'processing' ? 'processing' : 'idle'));
+      ind.lamp
+        .setVisible(status !== 'unbuilt')
+        .setFrame(FRAME.lamp(status === 'processing' ? 'processing' : status === 'blocked' ? 'blocked' : 'idle'));
+      ind.pad.setVisible(st.built);
+      ind.products.forEach((p, k) => p.setVisible(k < st.out));
       ind.ring.clear();
       if (status === 'processing') {
         const fraction = Math.min(1, (st.progress + sim.alpha) / batchTicks(line, state));
@@ -378,7 +402,9 @@ class FactoryView implements View {
         ind.ring.arc(0, 0, 12, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2).strokePath();
       }
       const missing = status === 'starved' ? missingInput(line, binDefs, state.bins) : undefined;
-      ind.note.setText(missing ? t('station.needs', { item: itemName(missing) }) : '');
+      ind.note.setText(
+        status === 'blocked' ? t('station.outputFull') : missing ? t('station.needs', { item: itemName(missing) }) : '',
+      );
     });
 
     const next = nextUnbuiltLine(this.def, state);
@@ -401,6 +427,148 @@ class FactoryView implements View {
   }
 }
 
+/**
+ * A loading bay lane: the buyer truck reverses in from the east gate, waits with an order bubble above it
+ * (product, how many loaded, and a bar for its patience), then drives off.
+ */
+class BayView implements View {
+  private readonly truck: Phaser.GameObjects.Image;
+  private readonly bubble: Phaser.GameObjects.Graphics;
+  private readonly icon: Phaser.GameObjects.Image;
+  private readonly count: Phaser.GameObjects.Text;
+  private readonly at = { x: 0, y: 0 };
+
+  constructor(
+    scene: Phaser.Scene,
+    private readonly proj: IsoProjection,
+    labels: Labels,
+    private readonly def: BayDef,
+  ) {
+    this.truck = scene.add.image(0, 0, TEX.atlas, FRAME.boxTruck).setOrigin(TRUCK_FRAME.originX, TRUCK_FRAME.originY).setVisible(false);
+    this.bubble = scene.add.graphics().setDepth(LABEL_DEPTH - 1);
+    this.icon = scene.add.image(0, 0, TEX.atlas, FRAME.item('sheet')).setDepth(LABEL_DEPTH).setVisible(false);
+    this.count = labels.add(13, '#ffffff');
+  }
+
+  update(sim: Simulation): void {
+    const bay = sim.state.bays[this.def.id]!;
+    const lane = this.def.lane;
+    this.bubble.clear();
+    if (bay.phase === 'empty') {
+      this.truck.setVisible(false);
+      this.icon.setVisible(false);
+      this.count.setText('');
+      return;
+    }
+    let x = lane.parkX;
+    if (bay.phase === 'arriving' || bay.phase === 'leaving') {
+      const drive = secondsToTicks(bay.phase === 'arriving' ? ORDERS.driveInS : ORDERS.driveOutS);
+      const done = Math.min(1, Math.max(0, (drive - bay.timer + sim.alpha) / drive));
+      const eased = done * done * (3 - 2 * done);
+      x = bay.phase === 'arriving' ? lane.startX + (lane.parkX - lane.startX) * eased : lane.parkX + (lane.startX - lane.parkX) * eased;
+    }
+    toScreen(this.proj, x + 3, lane.row + 1, this.at);
+    this.truck.setVisible(true).setPosition(this.at.x, this.at.y).setDepth(depthAt(x + 1.5, lane.row + 0.5));
+
+    if (bay.phase !== 'waiting' || !bay.item) {
+      this.icon.setVisible(false);
+      this.count.setText('');
+      return;
+    }
+    // Order bubble over the truck's box.
+    const top = toScreen(this.proj, x + 1, lane.row + 0.5);
+    const bx = top.x;
+    const by = top.y - 92;
+    this.bubble.fillStyle(0x13243a, 0.95).fillRoundedRect(bx - 38, by - 22, 76, 40, 8);
+    this.bubble.lineStyle(2, 0x2c4766, 1).strokeRoundedRect(bx - 38, by - 22, 76, 40, 8);
+    this.bubble.fillTriangle(bx - 6, by + 18, bx + 6, by + 18, bx, by + 26);
+    const patience = bay.timer / secondsToTicks(ORDERS.patienceS);
+    this.bubble.fillStyle(0x2c4766, 1).fillRect(bx - 30, by + 8, 60, 5);
+    this.bubble.fillStyle(patience > 0.3 ? 0x5cc84a : 0xe0483c, 1).fillRect(bx - 30, by + 8, 60 * patience, 5);
+    this.icon.setVisible(true).setFrame(FRAME.item(bay.item)).setPosition(bx - 18, by - 4).setScale(1.3);
+    this.count.setText(t('bay.waiting', { have: bay.have, want: bay.want })).setPosition(bx + 12, by + 4);
+  }
+}
+
+/** The staff hut: shows how many are hired and what the next hire costs, with a payment bar. */
+class StaffHutView implements View {
+  private readonly title: Phaser.GameObjects.Text;
+  private readonly price: Phaser.GameObjects.Text;
+  private readonly bar: Phaser.GameObjects.Graphics;
+
+  constructor(scene: Phaser.Scene, proj: IsoProjection, labels: Labels, private readonly def: StaffHutDef) {
+    const { x, y, w, h } = def.rect;
+    placeFrame(scene, proj, FRAME.hut, x + w, y + h, HUT_FRAME, depthAt(x + w / 2, y + h / 2));
+    const z = def.zones.hire;
+    const at = toScreen(proj, z.x + z.w / 2, z.y + z.h / 2);
+    this.title = labels.add(12, '#cfe3ff').setPosition(at.x, at.y + 26);
+    this.price = labels.add(13, '#ffd76a').setPosition(at.x, at.y + 44);
+    this.bar = scene.add.graphics().setPosition(at.x, at.y + 50).setDepth(LABEL_DEPTH);
+  }
+
+  update(sim: Simulation): void {
+    const hired = sim.state.employees.length;
+    const cost = STAFF.costs[hired];
+    this.title.setText(t('staff.title', { hired, max: STAFF.costs.length }));
+    this.price.setText(cost === undefined ? t('staff.full') : `$${cost}`);
+    this.bar.clear();
+    if (cost !== undefined && sim.state.hirePaid > 0) {
+      const width = 44;
+      this.bar.fillStyle(0x13243a, 0.9).fillRect(-width / 2 - 2, -3, width + 4, 8);
+      this.bar.fillStyle(0x5cc84a, 1).fillRect(-width / 2, -1, (width * sim.state.hirePaid) / cost, 4);
+    }
+  }
+}
+
+/** Employees: green-shirted workers easing along their routes, with their load stacked above them. */
+export class StaffView {
+  private readonly bodies = new Map<
+    number,
+    { sprite: Phaser.GameObjects.Image; load: Phaser.GameObjects.Image[]; walk: number; x: number; y: number }
+  >();
+  private readonly at = { x: 0, y: 0 };
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly proj: IsoProjection,
+  ) {}
+
+  /** Screen positions of every employee, for pick-up animations. */
+  positions(): { x: number; y: number }[] {
+    return [...this.bodies.values()].map((b) => ({ x: b.x, y: b.y }));
+  }
+
+  update(sim: Simulation, elapsedMs: number): void {
+    for (const e of sim.state.employees) {
+      let body = this.bodies.get(e.id);
+      toScreen(this.proj, e.x, e.y, this.at);
+      if (!body) {
+        const sprite = this.scene.add.image(this.at.x, this.at.y, TEX.atlas, FRAME.staffFront).setOrigin(0.5, FEET_Y / PLAYER_SIZE.h);
+        const load: Phaser.GameObjects.Image[] = [];
+        for (let i = 0; i < STAFF.capacity; i++) load.push(this.scene.add.image(0, 0, TEX.atlas, FRAME.item('scrap')).setOrigin(0.5, 1));
+        body = { sprite, load, walk: 0, x: this.at.x, y: this.at.y };
+        this.bodies.set(e.id, body);
+      }
+      const moving = Math.hypot(this.at.x - body.x, this.at.y - body.y) > 0.5;
+      body.walk = moving ? body.walk + elapsedMs / 1000 : 0;
+      const bob = Math.abs(Math.sin(body.walk * 3.2 * Math.PI)) * 3;
+      // Ease towards the simulated position (ticks are 20 a second), then bob on top.
+      body.x += (this.at.x - body.x) * 0.5;
+      body.y += (this.at.y - body.y) * 0.5;
+      const { x, y } = body;
+      const front = e.facing === 'down' || e.facing === 'right';
+      const flip = e.facing === 'right' || e.facing === 'left';
+      const depth = depthAt(e.x, e.y);
+      body.sprite.setFrame(front ? FRAME.staffFront : FRAME.staffBack).setFlipX(flip).setPosition(x, y - bob).setDepth(depth);
+      body.load.forEach((icon, i) => {
+        const item = e.stack[i];
+        icon.setVisible(!!item);
+        if (item) icon.setFrame(FRAME.item(item)).setPosition(x, y - bob - 78 - i * ICON_STEP).setDepth(depth + 0.1 + i * 0.001);
+      });
+    }
+  }
+}
+
 export interface StationViews {
   views: View[];
   bins: Map<string, BinView>;
@@ -411,15 +579,15 @@ export function createStationViews(
   proj: IsoProjection,
   labels: Labels,
   stations: readonly StationDef[],
-  /** The player's feet on screen, for pick-up animations. */
-  playerAt: () => { x: number; y: number },
+  /** The worker nearest a screen point, for pick-up animations. */
+  collectorAt: (x: number, y: number) => { x: number; y: number },
 ): StationViews {
   const views: View[] = [new TruckView(scene, proj, labels)];
   const bins = new Map<string, BinView>();
   for (const def of stations) {
     switch (def.kind) {
       case 'dump':
-        views.push(new FieldView(scene, proj, labels, def, playerAt));
+        views.push(new FieldView(scene, proj, labels, def, collectorAt));
         break;
       case 'processor':
         views.push(new ProcessorView(scene, proj, labels, def));
@@ -435,6 +603,14 @@ export function createStationViews(
         break;
       case 'factory':
         views.push(new FactoryView(scene, proj, labels, def));
+        break;
+      case 'bay':
+        views.push(new BayView(scene, proj, labels, def));
+        break;
+      case 'outlet':
+        break;
+      case 'staffHut':
+        views.push(new StaffHutView(scene, proj, labels, def));
         break;
     }
   }

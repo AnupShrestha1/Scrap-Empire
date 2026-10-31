@@ -1,4 +1,4 @@
-import { CARRY, PRICES, SELL_PER_S } from '../../data/balance';
+import { CARRY, PRICES, SELL_PER_S, STAFF } from '../../data/balance';
 import { ITEM_IDS } from '../../data/items';
 import { PURCHASE, UPGRADES, upgradeCost } from '../../data/upgrades';
 import { businessLevel } from '../../data/balance';
@@ -6,14 +6,33 @@ import { SIM } from '../../config';
 import { binCapacity, carryCapacity } from '../effective';
 import { PLAYER_PLACE, type SimEvent } from '../events';
 import { secondsToTicks, type GameState } from '../state';
-import { zoneAt, type CashPadDef, type FactoryDef, type StationDef, type ZoneHit } from '../stations';
+import { zoneAt, type CashPadDef, type FactoryDef, type StaffHutDef, type StationDef, type ZoneHit } from '../stations';
 import { nextUnbuiltLine } from './manufacturing';
+import { loadOrder } from './bays';
 import { randomKind, scatterPiece } from './field';
+
+/** Zones that sell or spend: they wait for PURCHASE.delayS of standing still, shown by a filling ring. */
+const CHARGED_ZONES: ReadonlySet<string> = new Set(['sell', 'buy', 'build', 'hire']);
+
+/** Products the outlet buys. */
+const PRODUCTS: ReadonlySet<string> = new Set(['sheet', 'can']);
+
+/**
+ * How far (0..1) the player is through the stand-still before a sell, upgrade or build pad acts, or
+ * undefined when they aren't waiting on one.
+ */
+export function padCharge(inter: InteractionState): number | undefined {
+  if (!inter.zone || !CHARGED_ZONES.has(inter.zone)) return undefined;
+  const fraction = inter.dwell / secondsToTicks(PURCHASE.delayS);
+  return fraction < 1 ? Math.max(0, fraction) : undefined;
+}
 
 /** Transient interaction bookkeeping; not saved. */
 export interface InteractionState {
   /** "stationId:zone" the player stood in last tick. */
   zoneKey: string | null;
+  /** The zone part of zoneKey. */
+  zone: string | null;
   /** Transfers owed; one item moves each time this reaches 1. */
   budget: number;
   /** Ticks spent in the current zone (cash pads wait before taking money). */
@@ -23,7 +42,7 @@ export interface InteractionState {
 }
 
 export function newInteractionState(): InteractionState {
-  return { zoneKey: null, budget: 0, dwell: 0, warned: false };
+  return { zoneKey: null, zone: null, budget: 0, dwell: 0, warned: false };
 }
 
 /**
@@ -41,6 +60,7 @@ export function stepInteraction(
   const key = hit ? `${hit.station.id}:${hit.zone}` : null;
   if (key !== inter.zoneKey) {
     inter.zoneKey = key;
+    inter.zone = hit?.zone ?? null;
     inter.budget = 1;
     inter.dwell = 0;
     inter.warned = false;
@@ -52,6 +72,7 @@ export function stepInteraction(
   if (!hit) return false;
   if (hit.zone === 'buy') return stepPurchase(state, hit.station, inter, events);
   if (hit.zone === 'build') return stepBuild(state, hit.station, inter, events);
+  if (hit.zone === 'hire') return stepHire(state, hit.station, inter, events);
   if (inter.budget < 1) return false;
   if (!transferOne(state, hit, inter, events)) return false;
   inter.budget -= 1;
@@ -107,6 +128,25 @@ function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState
   return true;
 }
 
+/** Pays towards the next employee; when paid, they appear at the hut. Partial payment is kept. */
+function stepHire(state: GameState, hut: StaffHutDef, inter: InteractionState, events: SimEvent[]): boolean {
+  const count = state.employees.length;
+  const cost = STAFF.costs[count];
+  if (cost === undefined) return false;
+  const pay = takePayment(state, inter, events, cost, state.hirePaid);
+  if (pay === 0) return false;
+  state.hirePaid += pay;
+  if (state.hirePaid >= cost) {
+    const z = hut.zones.hire;
+    const id = state.employees.reduce((m, e) => Math.max(m, e.id + 1), 0);
+    state.employees.push({ id, x: z.x + z.w / 2 + (count % 2) * 0.3, y: z.y + 0.5, facing: 'down', stack: [] });
+    state.hirePaid = 0;
+    events.push({ type: 'hired', count: count + 1 });
+    inter.dwell = secondsToTicks(PURCHASE.delayS) - secondsToTicks(PURCHASE.nextLevelPauseS);
+  }
+  return true;
+}
+
 /** Pays towards the factory's next production line. Partial payment is kept. */
 function stepBuild(state: GameState, factory: FactoryDef, inter: InteractionState, events: SimEvent[]): boolean {
   const line = nextUnbuiltLine(factory, state);
@@ -129,7 +169,7 @@ function stepBuild(state: GameState, factory: FactoryDef, inter: InteractionStat
 
 function transferOne(
   state: GameState,
-  hit: Exclude<ZoneHit, { zone: 'buy' | 'build' }>,
+  hit: Exclude<ZoneHit, { zone: 'buy' | 'build' | 'hire' }>,
   inter: InteractionState,
   events: SimEvent[],
 ): boolean {
@@ -139,8 +179,8 @@ function transferOne(
 
   switch (hit.zone) {
     case 'return': {
-      // Giving scrap back can't be undone, so like selling it waits until the player stands still.
-      if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return false;
+      // A short stand-still, so walking over the drop pad doesn't empty the worker's hands.
+      if (inter.dwell < secondsToTicks(PURCHASE.returnDelayS)) return false;
       const index = stack.lastIndexOf('scrap');
       if (index < 0) return false;
       stack.splice(index, 1);
@@ -171,9 +211,32 @@ function transferOne(
       return true;
     }
 
+    case 'lineOutput': {
+      const line = state.lines[hit.line.id]!;
+      if (!room || line.out === 0) return false;
+      line.out--;
+      stack.push(hit.line.recipe.output);
+      events.push({ type: 'itemMoved', item: hit.line.recipe.output, from: hit.line.id, to: PLAYER_PLACE });
+      return true;
+    }
+
+    case 'load':
+      return loadOrder(hit.station, state.bays[id]!, state, events);
+
     case 'sell': {
       // Selling can't be undone, so like cash pads it waits until the player stands still.
       if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return false;
+      if (hit.station.kind === 'outlet') {
+        let index = stack.length - 1;
+        while (index >= 0 && !PRODUCTS.has(stack[index]!)) index--;
+        if (index < 0) return false;
+        const item = stack[index]!;
+        stack.splice(index, 1);
+        state.money += PRICES[item];
+        state.earned += PRICES[item];
+        events.push({ type: 'sold', station: id, item, value: PRICES[item] });
+        return true;
+      }
       const bin = state.bins[id]!;
       if (bin.count === 0) return false;
       const item = hit.station.item;

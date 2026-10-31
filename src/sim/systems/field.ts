@@ -1,5 +1,6 @@
 import { FIELD } from '../../data/balance';
-import { BIG_KINDS, PIECE_KINDS, SMALL_KINDS } from '../../data/scrap';
+import { BIG_KINDS, droppedKind, PIECE_KINDS, pieceItem, SMALL_KINDS } from '../../data/scrap';
+import { boxHitsSolid, type Grid } from '../grid';
 import { carryCapacity, magnetRadius } from '../effective';
 import { PLAYER_PLACE, type SimEvent } from '../events';
 import type { FieldPiece, FieldState, GameState } from '../state';
@@ -55,6 +56,11 @@ export function stepField(state: GameState, dump: DumpDef, dt: number, events: S
     const piece = field.pieces[i]!;
     const dx = player.x - piece.x;
     const dy = player.y - piece.y;
+    if (piece.locked) {
+      // Dropped things unlock once the player has walked out of reach.
+      if (Math.hypot(dx, dy) > magnet + 0.2) delete piece.locked;
+      continue;
+    }
     if (Math.abs(dx) > magnet || Math.abs(dy) > magnet) continue;
     const distance = Math.hypot(dx, dy);
     if (distance > magnet) continue;
@@ -63,9 +69,10 @@ export function stepField(state: GameState, dump: DumpDef, dt: number, events: S
 
     if (distance <= FIELD.pickupRadius) {
       field.pieces.splice(i, 1);
-      for (let u = 0; u < units; u++) player.stack.push('scrap');
+      const item = pieceItem(piece.kind);
+      for (let u = 0; u < units; u++) player.stack.push(item);
       room -= units;
-      for (let u = 0; u < units; u++) events.push({ type: 'itemMoved', item: 'scrap', from: dump.id, to: PLAYER_PLACE });
+      for (let u = 0; u < units; u++) events.push({ type: 'itemMoved', item, from: dump.id, to: PLAYER_PLACE });
       events.push({ type: 'pickedUp', kind: piece.kind, units, x: piece.x, y: piece.y });
       changed = true;
       if (room <= 0) break;
@@ -77,4 +84,33 @@ export function stepField(state: GameState, dump: DumpDef, dt: number, events: S
     changed = true;
   }
   return changed;
+}
+
+/**
+ * The Drop button: everything the player carries lands on the ground around their feet, where it can be
+ * picked up again after a moment. Pieces never land inside anything solid. Returns true if anything dropped.
+ */
+export function dropStack(state: GameState, grid: Grid, events: SimEvent[]): boolean {
+  const { player, field } = state;
+  const count = player.stack.length;
+  if (count === 0) return false;
+  for (const item of player.stack) {
+    let x = player.x;
+    let y = player.y;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const angle = nextRandom(field) * Math.PI * 2;
+      const r = FIELD.dropSpread * (0.4 + 0.6 * nextRandom(field));
+      const cx = player.x + Math.cos(angle) * r;
+      const cy = player.y + Math.sin(angle) * r;
+      if (!boxHitsSolid(grid, cx - 0.1, cy - 0.1, cx + 0.1, cy + 0.1)) {
+        x = cx;
+        y = cy;
+        break;
+      }
+    }
+    field.pieces.push({ id: field.nextId++, x, y, kind: droppedKind(item), locked: true });
+  }
+  player.stack = [];
+  events.push({ type: 'dropped', count });
+  return true;
 }

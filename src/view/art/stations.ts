@@ -258,3 +258,26 @@ export const drawArrow = pixelArt((p) => {
   p.polygon([[1, 10], [15, 10], [8, 18]], C.lampYellow);
   p.rect(6, 2, 2, 7, '#fff3b0');
 });
+
+// ---------- Buyer truck (3 × 1, cab towards +x): white box body, red cab ----------
+
+export const drawBoxTruck = pixelArt((p) => {
+  const g = TRUCK_FRAME.ground;
+  for (const a of [0.5, 2.5]) {
+    const [wx, wy] = along(g, a, 1);
+    p.ellipse(wx, wy - 2, 3.5, 3, C.tyre);
+  }
+  isoBox(p, g, 2, 1, 24, { top: '#f2f4f6', left: '#dfe4e8', right: '#c3cad1' }, 3);
+  // A red stripe along the box.
+  const s0 = along(g, 0, 1);
+  const s1 = along(g, 2, 1);
+  p.polygon([up(s0, 12), up(s1, 12), up(s1, 9), up(s0, 9)], C.shirt);
+  const cab = along(g, 2, 0);
+  isoBox(p, cab, 1, 1, 20, { top: '#e8604f', left: C.shirt, right: C.shirtDark }, 3);
+  const w0 = along(cab, 1, 0.15);
+  const w1 = along(cab, 1, 0.85);
+  p.polygon([up(w0, 18), up(w1, 18), up(w1, 12), up(w0, 12)], C.glass);
+  const b0 = along(cab, 1, 0);
+  const b1 = along(cab, 1, 1);
+  p.polygon([up(b0, 6), up(b1, 6), up(b1, 3), up(b0, 3)], C.scrapGrey);
+});

@@ -38,6 +38,10 @@ Genre: "idle arcade" tycoon, built for active play. Progress needs the player pr
 | Q | Pads that sell, spend or give items back never sit on walking routes, and wait for the player to stand still | Approved (user's direction, M2a) |
 | R | No conveyor belts or chutes: factory lines draw straight from the bins | Approved (user's direction, M2b) |
 | S | A big dump site with scattered scrap pieces (small = 1, big = 3) and a magnet pick-up replaces the scrap pile; see DUMP_SITE_PLAN.md | Approved (user's direction, M2b) |
+| T | Products come out of the factory line onto an output spot (reverses P); a loading bay gets buyer trucks with orders shown above them (+25%); an outlet sells products at base price; see M3_PLAN.md | Approved (user's direction, M3a) |
+| U | Sell, upgrade and build pads wait 2 s of standing still, shown by a filling ring | Approved (user's direction) |
+| V | A Drop button (mid-low left, Q) drops everything carried; dropped items stay put until the player walks away | Approved (user's direction) |
+| W | Employees hired at a staff hut ($150 rising, up to 6, no wages) find and do jobs themselves: load trucks, clear the shredder tray, collect scrap and feed the shredder. They never spend or sell | Approved (user's direction, M3b) |
 
 ## 4. The yard
 

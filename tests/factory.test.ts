@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUILD_COSTS, PRESS, PRICES } from '../src/data/balance';
+import { BUILD_COSTS, LINE_OUTPUT, PRESS, PRICES } from '../src/data/balance';
 import { STATIONS, YARD } from '../src/data/layout';
 import { PURCHASE } from '../src/data/upgrades';
 import { memoryStorage } from '../src/platform/memoryStorage';
@@ -27,7 +27,7 @@ function standAt(state: GameState, x: number, y: number, ticks: number, events: 
 }
 
 function runPress(state: GameState, ticks: number, events: SimEvent[] = []) {
-  for (let i = 0; i < ticks; i++) stepLine(factory, press, state.lines.press!, binDefs, state, events);
+  for (let i = 0; i < ticks; i++) stepLine(press, state.lines.press!, binDefs, state, events);
   return events;
 }
 
@@ -67,21 +67,38 @@ describe('a production line', () => {
     return state;
   }
 
-  it('pulls a batch from its bin and sells the product the moment it is made', () => {
+  it('pulls a batch from its bin and puts the product on its output spot', () => {
     const state = withPress();
     state.bins['bin-iron']!.count = 7;
     const events = runPress(state, batchTicks(press, state));
     expect(state.bins['bin-iron']!.count).toBe(7 - PRESS.inputs.iron!);
-    expect(state.money).toBe(PRICES.sheet);
-    expect(state.earned).toBe(PRICES.sheet);
-    expect(events).toContainEqual({ type: 'sold', station: 'factory', item: 'sheet', value: PRICES.sheet });
+    expect(state.lines.press!.out).toBe(1);
+    expect(state.money).toBe(0);
+    expect(events).toContainEqual({ type: 'processed', station: 'press', item: 'sheet' });
+  });
+
+  it('pauses when its output spot is full, without taking more iron', () => {
+    const state = withPress();
+    state.bins['bin-iron']!.count = 1000;
+    runPress(state, (LINE_OUTPUT + 3) * (batchTicks(press, state) + 1));
+    expect(state.lines.press!.out).toBe(LINE_OUTPUT);
+    expect(state.bins['bin-iron']!.count).toBe(1000 - LINE_OUTPUT * PRESS.inputs.iron!);
+    expect(lineStatus(press, state.lines.press!, binDefs, state.bins)).toBe('blocked');
+  });
+
+  it('hands products to the player at its output spot', () => {
+    const state = withPress();
+    state.lines.press!.out = 3;
+    standAt(state, press.output.x, press.output.y, 40);
+    expect(state.player.stack).toEqual(['sheet', 'sheet', 'sheet']);
+    expect(state.lines.press!.out).toBe(0);
   });
 
   it('waits when its bin is short', () => {
     const state = withPress();
     state.bins['bin-iron']!.count = PRESS.inputs.iron! - 1;
     runPress(state, 200);
-    expect(state.money).toBe(0);
+    expect(state.lines.press!.out).toBe(0);
     expect(lineStatus(press, state.lines.press!, binDefs, state.bins)).toBe('starved');
   });
 
@@ -117,8 +134,11 @@ describe('selling from bins', () => {
     const input = centre((shredder.zones as { input: Rect }).input);
     const output = centre((shredder.zones as { output: Rect }).output);
     const build = centre(factory.zones.build);
+    const bays = STATIONS.filter((s) => s.kind === 'bay').map((b) => centre((b.zones as { load: Rect }).load));
+    const outputs = factory.lines.map((l) => centre(l.output));
     const routes = [
       ...fieldEdge.map((p) => [p, input]),
+      ...outputs.flatMap((o) => bays.map((b) => [o, b])),
       [input, output],
       ...bins.map((b) => [output, centre(b.zones.deposit)]),
       ...bins.map((b) => [centre(b.zones.deposit), build]),
@@ -128,6 +148,9 @@ describe('selling from bins', () => {
         const x = a.x + (b.x - a.x) * t;
         const y = a.y + (b.y - a.y) * t;
         for (const bin of bins) expect(inRect(bin.zones.sell, x, y), `${bin.id} sell pad on route ${i}`).toBe(false);
+        for (const pad of STATIONS.filter((s) => s.kind === 'cashPad' || s.kind === 'outlet')) {
+          expect(inRect(pad.rect, x, y), `${pad.id} on route ${i}`).toBe(false);
+        }
       }
     }
   });
@@ -144,8 +167,8 @@ describe('save v5 → v6', () => {
     const loaded = new SaveManager(store, isGameState).load();
     expect(loaded).not.toBeNull();
     const state = sanitizeState(loaded!.state, grid, STATIONS);
-    expect(state.lines.press).toEqual({ built: true, progress: 0 });
-    expect(state.lines['can-line']).toEqual({ built: false, progress: 0 });
+    expect(state.lines.press).toEqual({ built: true, progress: 0, out: 0 });
+    expect(state.lines['can-line']).toEqual({ built: false, progress: 0, out: 0 });
     expect('manufacturers' in state).toBe(false);
   });
 });

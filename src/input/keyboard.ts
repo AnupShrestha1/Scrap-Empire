@@ -17,6 +17,8 @@ const NO_DEFAULT = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', '
 
 export class KeyboardInput {
   private readonly held = new Set<string>();
+  /** Keys pressed since the last read, so a tap shorter than a frame still moves the worker. */
+  private readonly tapped = new Set<string>();
 
   constructor(private readonly target: Window) {
     target.addEventListener('keydown', this.onKeyDown);
@@ -28,12 +30,13 @@ export class KeyboardInput {
   read(out: Vec2): Vec2 {
     let x = 0;
     let y = 0;
-    for (const code of this.held) {
+    for (const code of new Set([...this.held, ...this.tapped])) {
       const dir = MOVE_KEYS[code];
       if (!dir) continue;
       x += dir[0];
       y += dir[1];
     }
+    this.tapped.clear();
     out.x = Math.max(-1, Math.min(1, x));
     out.y = Math.max(-1, Math.min(1, y));
     return out;
@@ -47,7 +50,10 @@ export class KeyboardInput {
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (NO_DEFAULT.has(e.code)) e.preventDefault();
-    if (e.code in MOVE_KEYS && !e.ctrlKey && !e.metaKey && !e.altKey) this.held.add(e.code);
+    if (e.code in MOVE_KEYS && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      this.held.add(e.code);
+      this.tapped.add(e.code);
+    }
   };
 
   private readonly onKeyUp = (e: KeyboardEvent): void => {
@@ -57,5 +63,6 @@ export class KeyboardInput {
   /** Keys released while the window is unfocused never send keyup, so drop everything. */
   private readonly onBlur = (): void => {
     this.held.clear();
+    this.tapped.clear();
   };
 }
