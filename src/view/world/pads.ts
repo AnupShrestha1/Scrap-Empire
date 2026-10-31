@@ -25,8 +25,7 @@ export interface PadSpec {
 export function padsFor(stations: readonly StationDef[]): PadSpec[] {
   const pads: PadSpec[] = [];
   for (const s of stations) {
-    if (s.kind === 'pile') {
-      pads.push({ station: s.id, zone: 'take', rect: s.zones.take, kind: 'pickup' });
+    if (s.kind === 'dump') {
       pads.push({ station: s.id, zone: 'return', rect: s.zones.return, kind: 'dropoff', label: t('pile.return') });
     } else if (s.kind === 'processor') {
       pads.push({ station: s.id, zone: 'input', rect: s.zones.input, kind: 'dropoff' });

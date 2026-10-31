@@ -1,5 +1,5 @@
 /** Current save format. Bump it, and add a migration, whenever GameState changes shape. */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 8;
 
 export type Migration = (state: unknown) => unknown;
 
@@ -54,6 +54,34 @@ export const MIGRATIONS: Migrations = {
       lines[id] = { built: Boolean((m as Json).built), progress: 0 };
     }
     return { ...s, lines };
+  },
+  /** v6 → v7 (M2b): copper on processor trays; yield, extraction and line speed upgrades. */
+  6: (state) => {
+    const s = state as Json;
+    const processors: Json = {};
+    for (const [id, p] of Object.entries((s.processors as Json) ?? {})) {
+      const m = p as Json;
+      processors[id] = { ...m, tray: { copper: 0, ...(m.tray as Json) }, carry: { copper: 0, ...(m.carry as Json) } };
+    }
+    const extra = { shredderYield: 0, extraction: 0, pressSpeed: 0, canSpeed: 0 };
+    return {
+      ...s,
+      processors,
+      upgrades: { ...extra, ...(s.upgrades as Json) },
+      upgradePaid: { ...extra, ...(s.upgradePaid as Json) },
+    };
+  },
+  /** v7 → v8: the scrap pile became a dump site with scattered pieces; the Magnet upgrade. */
+  7: (state) => {
+    const { piles, ...s } = state as Json;
+    let units = 0;
+    for (const p of Object.values((piles as Json) ?? {})) units += Number((p as Json).items) || 0;
+    return {
+      ...s,
+      field: { pieces: [], seed: 20261031, nextId: 0, pendingUnits: units },
+      upgrades: { magnet: 0, ...(s.upgrades as Json) },
+      upgradePaid: { magnet: 0, ...(s.upgradePaid as Json) },
+    };
   },
 };
 

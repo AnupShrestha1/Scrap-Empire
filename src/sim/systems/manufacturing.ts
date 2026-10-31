@@ -1,13 +1,15 @@
 import { PRICES } from '../../data/balance';
 import { ITEM_IDS, type ItemId } from '../../data/items';
 import type { SimEvent } from '../events';
-import { secondsToTicks, type BinState, type GameState, type LineState } from '../state';
+import { lineBatchTicks } from '../effective';
+import type { BinState, GameState, LineState } from '../state';
 import type { BinDef, FactoryDef, LineDef } from '../stations';
 
 export type LineStatus = 'unbuilt' | 'idle' | 'starved' | 'processing';
 
-export function batchTicks(line: LineDef): number {
-  return secondsToTicks(line.recipe.batchS);
+/** Batch time after the line's speed upgrade. */
+export function batchTicks(line: LineDef, state: GameState): number {
+  return lineBatchTicks(line, state);
 }
 
 /** The feed bin for an input item. */
@@ -65,7 +67,7 @@ export function stepLine(
     return true;
   }
   st.progress++;
-  if (st.progress < batchTicks(line)) return true;
+  if (st.progress < batchTicks(line, state)) return true;
   st.progress = 0;
   const item = line.recipe.output;
   const value = PRICES[item];

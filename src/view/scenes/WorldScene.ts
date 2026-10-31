@@ -25,6 +25,9 @@ const FACING_FRAME: Readonly<Record<Facing, { frame: string; flip: boolean }>> =
   left: { frame: FRAME.playerBack, flip: true },
 };
 
+/** Pick-ups closer together than this keep a combo going. */
+const COMBO_WINDOW_MS = 700;
+
 /** Walking bob: height in render pixels and cycles per second. */
 const BOB = { height: 3, rate: 3.2 } as const;
 
@@ -52,6 +55,8 @@ export class WorldScene extends Phaser.Scene {
   private readonly point: Vec2 = { x: 0, y: 0 };
   private lastFrameAt = 0;
   private walkTime = 0;
+  private combo = 0;
+  private lastPickupAt = -Infinity;
   private cameraX = 0;
   private cameraY = 0;
 
@@ -69,7 +74,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.labels = new Labels(this);
     placePads(this, this.proj, this.labels, stations);
-    this.stations = createStationViews(this, this.proj, this.labels, stations);
+    this.stations = createStationViews(this, this.proj, this.labels, stations, () => this.player ?? { x: 0, y: 0 });
     this.player = this.add.image(0, 0, TEX.atlas, FRAME.playerFront).setOrigin(0.5, FEET_Y / PLAYER_SIZE.h);
     this.carried = new CarriedStackView(this, this.labels);
     this.hint = new HintArrowView(this, this.proj, stations);
@@ -133,9 +138,21 @@ export class WorldScene extends Phaser.Scene {
     const { sfx, toasts } = this.ctx;
     switch (event.type) {
       case 'itemMoved':
-        if (event.to === 'player') sfx.play('pickup');
+        // Pick-ups from the dump site have their own pop (see 'pickedUp').
+        if (event.to === 'player' && event.from !== 'dump') sfx.play('pickup');
         else if (event.from === 'player') sfx.play('drop');
         break;
+      case 'pickedUp': {
+        // Quick pick-ups in a row climb in pitch, so sweeping a cluster sings.
+        this.combo = timeMs - this.lastPickupAt < COMBO_WINDOW_MS ? Math.min(this.combo + 1, 12) : 0;
+        this.lastPickupAt = timeMs;
+        sfx.play('pop', 1 + this.combo * 0.06);
+        if (event.units > 1) {
+          const at = toScreen(this.proj, event.x, event.y);
+          this.labels.floating(`+${event.units}`, at.x, at.y - 30, '#ffffff');
+        }
+        break;
+      }
       case 'processed':
         sfx.play('chunk');
         break;
@@ -166,6 +183,18 @@ export class WorldScene extends Phaser.Scene {
         sfx.play('upgrade');
         break;
       }
+      case 'locked':
+        if (event.level) toasts.show(t('toast.locked', { level: event.level }), 'warn');
+        else if (event.line) {
+          const line = this.ctx.sim.factoryLine(event.line);
+          toasts.show(t('locked.line', { name: line ? t(line.name) : event.line }), 'warn');
+        }
+        sfx.play('warn');
+        break;
+      case 'levelUp':
+        toasts.show(t('toast.levelUp', { level: event.level }), 'good');
+        sfx.play('objective');
+        break;
       case 'truckArriving':
         sfx.play('horn');
         break;

@@ -11,14 +11,24 @@ export const SUPPLIER = {
   firstDeliveryS: 4,
   driveInS: 3,
   driveOutS: 3,
-  /** Scrap moved from the truck to the pile per second. */
-  unloadPerS: 4,
+  /** Pieces tipped from the truck onto the field per second. */
+  unloadPerS: 5,
 };
 
-export const PILE = {
-  capacity: 40,
-  /** Scrap already waiting in a new game, so the player can start at once. */
-  startItems: 10,
+/** The dump site, where scrap lies scattered for the player to collect. */
+export const FIELD = {
+  /** Most pieces on the field; the truck waits at the gate while it's full. */
+  capacity: 150,
+  /** Scrap units scattered on the field in a new game, so the player can start at once. */
+  startUnits: 12,
+  /** Within this distance (tiles) the player picks a piece up. */
+  pickupRadius: 0.45,
+  /** Within this distance pieces slide towards the player; the Magnet upgrade widens it. */
+  magnetRadius: 1.1,
+  /** How fast pulled pieces slide, in tiles per second. */
+  pullSpeed: 6,
+  /** Chance a delivered piece is a big one (worth 3), when the load has room for it. */
+  bigChance: 0.25,
 };
 
 export const CARRY = {
@@ -79,9 +89,24 @@ export const PRICES: Readonly<Record<ItemId, number>> = {
   scrap: 0,
   iron: 2,
   aluminium: 5,
+  /** Sold raw until the wire drawer arrives (M4). */
+  copper: 8,
   sheet: 9,
   can: 15,
 };
 
 /** Items sold per second while standing on a sell pad. */
 export const SELL_PER_S = 10;
+
+/**
+ * Lifetime earnings needed for each business level (index 0 is level 1). Levels unlock purchases, so new
+ * options arrive at a steady pace instead of all at once.
+ */
+export const BUSINESS_LEVELS: readonly number[] = [0, 150, 500, 1500, 4000, 10000];
+
+/** Business level (1-based) for lifetime earnings. */
+export function businessLevel(earned: number): number {
+  let level = 1;
+  for (let i = 1; i < BUSINESS_LEVELS.length; i++) if (earned >= BUSINESS_LEVELS[i]!) level = i + 1;
+  return level;
+}

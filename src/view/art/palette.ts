@@ -69,6 +69,8 @@ export const PALETTE = {
   ironDark: '#6f7c8d',
   aluminium: '#e3e9ee',
   aluminiumDark: '#b5c2cc',
+  copper: '#e07a2e',
+  copperDark: '#a9541c',
 
   truckBlue: '#2f6fd1',
   truckBlueDark: '#1f4e9e',

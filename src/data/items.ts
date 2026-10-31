@@ -1,4 +1,4 @@
-export const ITEM_IDS = ['scrap', 'iron', 'aluminium', 'sheet', 'can'] as const;
+export const ITEM_IDS = ['scrap', 'iron', 'aluminium', 'copper', 'sheet', 'can'] as const;
 export type ItemId = (typeof ITEM_IDS)[number];
 
 export function isItemId(value: unknown): value is ItemId {
@@ -7,5 +7,5 @@ export function isItemId(value: unknown): value is ItemId {
 
 /** A count of every item, all zero. */
 export function emptyItemCounts(): Record<ItemId, number> {
-  return { scrap: 0, iron: 0, aluminium: 0, sheet: 0, can: 0 };
+  return { scrap: 0, iron: 0, aluminium: 0, copper: 0, sheet: 0, can: 0 };
 }

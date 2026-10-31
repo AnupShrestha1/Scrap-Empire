@@ -36,6 +36,8 @@ Genre: "idle arcade" tycoon, built for active play. Progress needs the player pr
 | O | One factory building with production lines bought one at a time, instead of separate machines on plots | Approved (user's direction, M2a) |
 | P | Products sell the moment they are made: no product racks and no carrying products | Approved (user's direction, M2a) |
 | Q | Pads that sell, spend or give items back never sit on walking routes, and wait for the player to stand still | Approved (user's direction, M2a) |
+| R | No conveyor belts or chutes: factory lines draw straight from the bins | Approved (user's direction, M2b) |
+| S | A big dump site with scattered scrap pieces (small = 1, big = 3) and a magnet pick-up replaces the scrap pile; see DUMP_SITE_PLAN.md | Approved (user's direction, M2b) |
 
 ## 4. The yard
 

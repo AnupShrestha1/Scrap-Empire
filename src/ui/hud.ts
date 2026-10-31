@@ -1,6 +1,7 @@
 import { t, type StringKey } from '../i18n';
 import type { SettingsStore } from '../settings';
 import { currentObjective } from '../sim/systems/objectives';
+import { BUSINESS_LEVELS, businessLevel } from '../data/balance';
 import type { GameState } from '../sim/state';
 
 const ICON_SOUND_ON =
@@ -13,6 +14,8 @@ const ICON_HINT =
 /** The always-visible HUD: cash, the current objective, and sound and hint toggles. */
 export class Hud {
   private readonly cash: HTMLSpanElement;
+  private readonly level: HTMLSpanElement;
+  private readonly levelFill: HTMLSpanElement;
   private readonly objective: HTMLDivElement;
   private readonly objectiveText: HTMLSpanElement;
   private readonly objectiveCount: HTMLSpanElement;
@@ -30,12 +33,21 @@ export class Hud {
     this.cash = el('span', 'hud-value');
     chip.append(coin, this.cash);
 
+    const levelChip = el('div', 'hud-chip hud-level');
+    this.level = el('span', 'hud-level-text');
+    const track = el('span', 'hud-level-track');
+    this.levelFill = el('span', 'hud-level-fill');
+    track.append(this.levelFill);
+    levelChip.append(this.level, track);
+    const chips = el('div', 'hud-chips');
+    chips.append(chip, levelChip);
+
     this.objective = el('div', 'hud-objective');
     this.objectiveText = el('span', 'hud-objective-text');
     this.objectiveCount = el('span', 'hud-objective-count');
     this.objectiveReward = el('span', 'hud-objective-reward');
     this.objective.append(this.objectiveText, this.objectiveCount, this.objectiveReward);
-    bar.append(chip, this.objective);
+    bar.append(chips, this.objective);
 
     const buttons = el('div', 'hud-buttons');
     this.soundButton = iconButton(() => this.toggle('sound'));
@@ -48,10 +60,15 @@ export class Hud {
 
   update(state: GameState): void {
     const objective = currentObjective(state);
-    const key = `${state.money}|${state.objectives.index}|${state.objectives.progress}`;
+    const key = `${state.money}|${state.earned}|${state.objectives.index}|${state.objectives.progress}`;
     if (key === this.shown) return;
     this.shown = key;
     this.cash.textContent = state.money.toLocaleString('en-US');
+    const level = businessLevel(state.earned);
+    this.level.textContent = t('hud.level', { level });
+    const from = BUSINESS_LEVELS[level - 1] ?? 0;
+    const to = BUSINESS_LEVELS[level];
+    this.levelFill.style.width = to === undefined ? '100%' : `${Math.round(((state.earned - from) / (to - from)) * 100)}%`;
     this.objective.hidden = !objective;
     if (!objective) return;
     this.objectiveText.textContent = t(`objective.${objective.id}` as StringKey);

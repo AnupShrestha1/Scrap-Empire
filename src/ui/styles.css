@@ -302,3 +302,31 @@ body {
   top: auto;
   bottom: 8px;
 }
+
+.hud-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.hud-level {
+  min-width: 0;
+  padding: 5px 12px;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.hud-level-track {
+  position: relative;
+  width: 56px;
+  height: 8px;
+  border-radius: 4px;
+  background: #2c4766;
+  overflow: hidden;
+}
+
+.hud-level-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: #5cc84a;
+}

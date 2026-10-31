@@ -15,7 +15,6 @@ export const FRAME = {
   tree: (variant: number) => `tree-${variant}`,
   lampPost: 'lamp-post',
   booth: 'booth',
-  pile: (stage: number) => `pile-${stage}`,
   shredder: (frame: number) => `shredder-${frame}`,
   lamp: (status: ProcessorStatus) => `lamp-${status}`,
   bin: (item: string, level: number) => `bin-${item}-${level}`,
@@ -24,7 +23,7 @@ export const FRAME = {
   pad: (station: string, zone: string) => `pad-${station}-${zone}`,
   arrow: 'hint-arrow',
   factory: 'factory',
-  chute: 'chute',
+  piece: (kind: number) => `piece-${kind}`,
 } as const;
 
 export const SCENE = {

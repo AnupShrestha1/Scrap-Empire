@@ -2,6 +2,7 @@
 // Each objective counts matching sim events, or checks the state for things already done.
 import type { SimEvent } from '../sim/events';
 import type { GameState } from '../sim/state';
+import { businessLevel } from './balance';
 
 export interface ObjectiveDef {
   id: string;
@@ -21,8 +22,8 @@ export const OBJECTIVES: readonly ObjectiveDef[] = [
     id: 'pickScrap',
     target: 1,
     reward: 5,
-    counts: (e) => +(e.type === 'itemMoved' && e.item === 'scrap' && e.from === 'pile' && e.to === 'player'),
-    hint: { station: 'pile', zone: 'take' },
+    counts: (e) => +(e.type === 'itemMoved' && e.item === 'scrap' && e.from === 'dump' && e.to === 'player'),
+    hint: { station: 'dump', zone: 'field' },
   },
   {
     id: 'feedShredder',
@@ -72,5 +73,45 @@ export const OBJECTIVES: readonly ObjectiveDef[] = [
     reward: 40,
     done: (s) => s.upgrades.shredderSpeed + s.upgrades.binSize + s.upgrades.supply > 0,
     hint: { station: 'pad-shredder', zone: 'buy' },
+  },
+  {
+    id: 'buildPress',
+    target: 1,
+    reward: 50,
+    done: (s) => s.lines.press?.built === true,
+    hint: { station: 'factory', zone: 'build' },
+  },
+  {
+    id: 'makeSheets',
+    target: 10,
+    reward: 60,
+    counts: (e) => +(e.type === 'processed' && e.station === 'press'),
+    hint: { station: 'bin-iron', zone: 'deposit' },
+  },
+  {
+    id: 'reachLevel2',
+    target: 1,
+    reward: 40,
+    done: (s) => businessLevel(s.earned) >= 2,
+  },
+  {
+    id: 'buildCanLine',
+    target: 1,
+    reward: 100,
+    done: (s) => s.lines['can-line']?.built === true,
+    hint: { station: 'factory', zone: 'build' },
+  },
+  {
+    id: 'unlockCopper',
+    target: 1,
+    reward: 150,
+    done: (s) => s.upgrades.extraction > 0,
+    hint: { station: 'pad-extraction', zone: 'buy' },
+  },
+  {
+    id: 'reachLevel4',
+    target: 1,
+    reward: 250,
+    done: (s) => businessLevel(s.earned) >= 4,
   },
 ];

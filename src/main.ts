@@ -29,7 +29,7 @@ async function boot(): Promise<void> {
   if (loaded?.fromBackup) console.warn('Main save was unreadable; restored the backup');
   const state = loaded ? sanitizeState(loaded.state, grid, STATIONS) : createNewGame(grid, STATIONS);
 
-  const sim = new Simulation(state, grid, STATIONS, TRUCK_ROUTE.pile);
+  const sim = new Simulation(state, grid, STATIONS, TRUCK_ROUTE.dump);
   const autosave = new AutoSaver(saves, sim);
   autosave.start();
 

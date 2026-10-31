@@ -1,5 +1,5 @@
 // Manufacturing art: the factory building from the reference (red roof, brick, blue windows),
-// chutes from the bins, and product icons. Art pixels.
+// and product icons. Art pixels.
 import { along, footprint, isoBox, isoFrame, up, type Pt } from './isoshapes';
 import { PALETTE as C } from './palette';
 import { pixelArt, type Pixels } from './pixel';
@@ -90,23 +90,6 @@ export const drawFactory = pixelArt((p) => {
 export function lineWindowPoint(rect: { x: number; y: number; h: number }, i: number): Pt {
   return [rect.x + 0.5 + i, rect.y + rect.h];
 }
-
-// ---------- Chute (1×1 tile of a raised trough along +x) ----------
-
-export const CHUTE_FRAME = isoFrame(1, 1, 16);
-
-export const drawChute = pixelArt((p) => {
-  const g = CHUTE_FRAME.ground;
-  // Legs at both ends.
-  for (const a of [0.1, 0.8]) isoBox(p, along(g, a, 0.45), 0.1, 0.1, 10, STEEL);
-  // The trough, open on top, with direction chevrons.
-  isoBox(p, along(g, 0, 0.3), 1, 0.4, 14, { top: C.hole, left: C.steelLeft, right: C.steelRight }, 10);
-  for (const a of [0.25, 0.65]) {
-    const [x, y] = up(along(g, a, 0.5), 14);
-    p.rect(x - 2, y - 1, 2, 1, C.safety);
-    p.rect(x, y, 2, 1, C.safety);
-  }
-});
 
 // ---------- Product icons ----------
 

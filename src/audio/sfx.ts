@@ -1,6 +1,6 @@
 // Tiny sound effects synthesised with WebAudio: no audio files to download.
 
-export type SoundId = 'pickup' | 'drop' | 'cash' | 'upgrade' | 'warn' | 'horn' | 'objective' | 'chunk';
+export type SoundId = 'pickup' | 'drop' | 'cash' | 'upgrade' | 'warn' | 'horn' | 'objective' | 'chunk' | 'pop';
 
 interface Note {
   /** Start and end frequency in Hz (a slide when they differ). */
@@ -39,6 +39,10 @@ const SOUNDS: Readonly<Record<SoundId, readonly Note[]>> = {
     { from: 1175, to: 1175, at: 0.1, duration: 0.22, wave: 'triangle', volume: 0.12 },
   ],
   chunk: [{ from: 140, to: 70, at: 0, duration: 0.07, wave: 'triangle', volume: 0.07 }],
+  pop: [
+    { from: 660, to: 990, at: 0, duration: 0.05, wave: 'square', volume: 0.05 },
+    { from: 1320, to: 1320, at: 0.03, duration: 0.04, wave: 'triangle', volume: 0.05 },
+  ],
 };
 
 /** Minimum gap between two plays of the same sound, so fast transfers don't turn into a buzz. */
@@ -59,7 +63,8 @@ export class Sfx {
     window.addEventListener('touchend', unlock);
   }
 
-  play(id: SoundId): void {
+  /** Plays a sound; `pitch` scales every frequency (1 = as written). */
+  play(id: SoundId, pitch = 1): void {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running' || this.muted()) return;
     const now = ctx.currentTime;
@@ -71,8 +76,8 @@ export class Sfx {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = note.wave;
-      osc.frequency.setValueAtTime(note.from, start);
-      if (note.to !== note.from) osc.frequency.exponentialRampToValueAtTime(note.to, start + note.duration);
+      osc.frequency.setValueAtTime(note.from * pitch, start);
+      if (note.to !== note.from) osc.frequency.exponentialRampToValueAtTime(note.to * pitch, start + note.duration);
       gain.gain.setValueAtTime(note.volume, start);
       gain.gain.exponentialRampToValueAtTime(0.0001, start + note.duration);
       osc.connect(gain).connect(ctx.destination);

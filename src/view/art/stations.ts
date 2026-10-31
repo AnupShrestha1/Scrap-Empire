@@ -20,41 +20,6 @@ function scrapChunks(p: Pixels, rand: () => number, x0: number, y0: number, w: n
   }
 }
 
-// ---------- Scrap pile (2×2) ----------
-
-export const PILE_FRAME = isoFrame(2, 2, 24);
-export const PILE_STAGES = 4;
-
-/** Stage 0 is a few scraps on the ground; stage 3 is a full heap. */
-export function drawPile(stage: number) {
-  return pixelArt((p) => {
-    const centre = along(PILE_FRAME.ground, 1, 1);
-    const [cx, cy] = centre;
-    const rand = seededRandom(31 + stage);
-    if (stage === 0) {
-      scrapChunks(p, rand, cx - 18, cy - 6, 36, 12, 14, () => true);
-      return;
-    }
-    const rx = [0, 13, 21, 29][stage]!;
-    const top = [0, 9, 15, 22][stage]!;
-    const inside = (x: number, y: number) => {
-      const dx = (x + 0.5 - cx) / rx;
-      const dy = y + 0.5 < cy ? (cy - y - 0.5) / top : (y + 0.5 - cy) / (rx / 2);
-      return dx * dx + dy * dy <= 1;
-    };
-    for (let y = cy - top; y < cy + rx / 2; y++) {
-      for (let x = cx - rx; x < cx + rx; x++) if (inside(x, y)) p.px(x, y, C.scrapDark);
-    }
-    scrapChunks(p, rand, cx - rx, cy - top, rx * 2, top + rx / 2, rx * top, inside);
-    if (stage >= 2) {
-      for (const [tx, ty] of [[cx - rx / 2, cy - 2], [cx + rx / 3, cy - top / 2]] as const) {
-        p.ellipse(tx, ty, 4, 2.5, C.tyre);
-        p.ellipse(tx, ty, 1.5, 1, C.scrapGrey);
-      }
-    }
-  });
-}
-
 // ---------- Shredder (2×2) ----------
 
 export const SHREDDER_FRAME = isoFrame(2, 2, 32);
@@ -127,13 +92,16 @@ export const BIN_FRAME = isoFrame(2, 2, 18);
 export const BIN_LEVELS = 5;
 const WALL_H = 16;
 
-const BIN_COLOURS: Record<'iron' | 'aluminium', { wall: string; wallDark: string; rim: string; fill: string; fillDark: string }> = {
+export type BinItem = 'iron' | 'aluminium' | 'copper';
+
+const BIN_COLOURS: Record<BinItem, { wall: string; wallDark: string; rim: string; fill: string; fillDark: string }> = {
   iron: { wall: '#5f6f86', wallDark: '#4a586c', rim: '#7d8ca3', fill: C.iron, fillDark: C.ironDark },
   aluminium: { wall: '#8fa3b3', wallDark: '#71838f', rim: '#a9bccb', fill: C.aluminium, fillDark: C.aluminiumDark },
+  copper: { wall: '#b5602a', wallDark: '#8a4620', rim: '#d27b3d', fill: C.copper, fillDark: C.copperDark },
 };
 
 /** An open container; `level` 0..BIN_LEVELS-1 is how full it looks. */
-export function drawBin(item: 'iron' | 'aluminium', level: number) {
+export function drawBin(item: BinItem, level: number) {
   return pixelArt((p) => {
     const g = BIN_FRAME.ground;
     const k = BIN_COLOURS[item];
@@ -210,6 +178,7 @@ export const ITEM_FRAME = isoFrame(0.5, 0.25, 4);
 const INGOT: Partial<Record<ItemId, { top: string; side: string }>> = {
   iron: { top: C.iron, side: C.ironDark },
   aluminium: { top: C.aluminium, side: C.aluminiumDark },
+  copper: { top: C.copper, side: C.copperDark },
 };
 
 export function drawItem(item: ItemId) {

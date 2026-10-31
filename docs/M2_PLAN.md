@@ -1,6 +1,6 @@
 # Milestone 2 — Manufacturing and Economy: Plan
 
-Approved 2026-10-30. M2a implemented 2026-10-30; M2b next. Builds on [GAME_DESIGN.md](GAME_DESIGN.md) §7.2–7.5 and §7.7, and [ARCHITECTURE.md](ARCHITECTURE.md) §8.
+Approved 2026-10-30. M2a implemented 2026-10-30; M2b implemented 2026-10-31 without the buyer truck (dropped: products sell instantly). Builds on [GAME_DESIGN.md](GAME_DESIGN.md) §7.2–7.5 and §7.7, and [ARCHITECTURE.md](ARCHITECTURE.md) §8.
 
 > **Changed during M2a at the user's direction** (GAME_DESIGN changes O, P, Q): the separate machines and
 > product racks below were replaced by **one factory building with production lines**, products **sell the

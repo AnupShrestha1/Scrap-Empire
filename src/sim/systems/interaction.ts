@@ -1,12 +1,14 @@
 import { CARRY, PRICES, SELL_PER_S } from '../../data/balance';
 import { ITEM_IDS } from '../../data/items';
 import { PURCHASE, UPGRADES, upgradeCost } from '../../data/upgrades';
+import { businessLevel } from '../../data/balance';
 import { SIM } from '../../config';
 import { binCapacity, carryCapacity } from '../effective';
 import { PLAYER_PLACE, type SimEvent } from '../events';
 import { secondsToTicks, type GameState } from '../state';
 import { zoneAt, type CashPadDef, type FactoryDef, type StationDef, type ZoneHit } from '../stations';
 import { nextUnbuiltLine } from './manufacturing';
+import { randomKind, scatterPiece } from './field';
 
 /** Transient interaction bookkeeping; not saved. */
 export interface InteractionState {
@@ -74,11 +76,23 @@ function takePayment(state: GameState, inter: InteractionState, events: SimEvent
   return pay;
 }
 
+/** Reports, once per visit and after the usual stand-still, why a pad won't take money yet. */
+function warnLocked(inter: InteractionState, events: SimEvent[], why: { level?: number; line?: string }): false {
+  if (inter.dwell >= secondsToTicks(PURCHASE.delayS) && !inter.warned) {
+    events.push({ type: 'locked', ...why });
+    inter.warned = true;
+  }
+  return false;
+}
+
 /** Pays towards the pad's upgrade, a slice per tick. Partial payment is kept. */
 function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState, events: SimEvent[]): boolean {
   const id = pad.upgrade;
   const level = state.upgrades[id];
-  if (level >= UPGRADES[id].maxLevel) return false;
+  const def = UPGRADES[id];
+  if (level >= def.maxLevel) return false;
+  if (def.requiresLevel && businessLevel(state.earned) < def.requiresLevel) return warnLocked(inter, events, { level: def.requiresLevel });
+  if (def.requiresLine && !state.lines[def.requiresLine]?.built) return warnLocked(inter, events, { line: def.requiresLine });
   const cost = upgradeCost(id, level);
   const pay = takePayment(state, inter, events, cost, state.upgradePaid[id]);
   if (pay === 0) return false;
@@ -97,6 +111,9 @@ function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState
 function stepBuild(state: GameState, factory: FactoryDef, inter: InteractionState, events: SimEvent[]): boolean {
   const line = nextUnbuiltLine(factory, state);
   if (!line) return false;
+  if (line.requiresLevel && businessLevel(state.earned) < line.requiresLevel) {
+    return warnLocked(inter, events, { level: line.requiresLevel });
+  }
   const pay = takePayment(state, inter, events, line.buildCost, state.buildPaid[line.id]!);
   if (pay === 0) return false;
   state.buildPaid[line.id]! += pay;
@@ -121,21 +138,13 @@ function transferOne(
   const id = hit.station.id;
 
   switch (hit.zone) {
-    case 'take': {
-      const pile = state.piles[id]!;
-      if (!room || pile.items === 0) return false;
-      pile.items--;
-      stack.push('scrap');
-      events.push({ type: 'itemMoved', item: 'scrap', from: id, to: PLAYER_PLACE });
-      return true;
-    }
-
     case 'return': {
-      const pile = state.piles[id]!;
+      // Giving scrap back can't be undone, so like selling it waits until the player stands still.
+      if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return false;
       const index = stack.lastIndexOf('scrap');
       if (index < 0) return false;
       stack.splice(index, 1);
-      pile.items++;
+      scatterPiece(state.field, hit.station.zones.field, randomKind(state.field, 1));
       events.push({ type: 'itemMoved', item: 'scrap', from: PLAYER_PLACE, to: id });
       return true;
     }

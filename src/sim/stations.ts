@@ -15,12 +15,15 @@ interface StationBase {
   rect: Rect;
 }
 
-export interface PileDef extends StationBase {
-  kind: 'pile';
-  /** Limits truck deliveries only; scrap returned by the player may go over it. */
+/**
+ * The dump site: a walkable field where delivered scrap lies scattered. The player collects pieces by
+ * walking near them (see systems/field.ts), and can drop carried scrap back on the `return` pad.
+ */
+export interface DumpDef extends StationBase {
+  kind: 'dump';
+  /** Most pieces on the field; limits truck deliveries only (returned scrap may go over it). */
   capacity: number;
-  /** `take` picks scrap up; `return` puts carried scrap back, so the player can always free their hands. */
-  zones: { take: Rect; return: Rect };
+  zones: { field: Rect; return: Rect };
 }
 
 export interface ProcessorDef extends StationBase {
@@ -45,20 +48,22 @@ export interface LineDef {
   /** i18n key for its name. */
   name: 'machine.press' | 'machine.canLine';
   recipe: ManufacturerRecipe;
-  /** Bins it pulls inputs from, through a chute (storage is the hub; nobody carries inputs to it). */
+  /** Bins it pulls inputs from directly (storage is the hub; nobody carries inputs to it). */
   feeds: readonly string[];
   buildCost: number;
+  /** Business level needed before it can be bought. */
+  requiresLevel?: number;
+  /** The upgrade that speeds this line up. */
+  speedUpgrade?: UpgradeId;
 }
 
 /**
- * The factory: one building holding production lines. Each built line pulls from its feed bins and
- * sells what it makes straight away.
+ * The factory: one building holding production lines. Each built line pulls straight from its feed bins
+ * and sells what it makes at once.
  */
 export interface FactoryDef extends StationBase {
   kind: 'factory';
   lines: readonly LineDef[];
-  /** Raised chutes from bins to the factory, for drawing: tiles along +x from (x, y); shown once `line` is built. */
-  chutes: readonly { x: number; y: number; length: number; line: string }[];
   zones: { build: Rect };
 }
 
@@ -69,10 +74,10 @@ export interface CashPadDef extends StationBase {
   zones: { buy: Rect };
 }
 
-export type StationDef = PileDef | ProcessorDef | BinDef | CashPadDef | FactoryDef;
+export type StationDef = DumpDef | ProcessorDef | BinDef | CashPadDef | FactoryDef;
 
 export type ZoneHit =
-  | { station: PileDef; zone: 'take' | 'return' }
+  | { station: DumpDef; zone: 'return' }
   | { station: ProcessorDef; zone: 'input' | 'output' }
   | { station: BinDef; zone: 'deposit' | 'sell' }
   | { station: CashPadDef; zone: 'buy' }
@@ -86,8 +91,8 @@ export function inRect(r: Rect, x: number, y: number): boolean {
 export function zoneAt(stations: readonly StationDef[], x: number, y: number): ZoneHit | null {
   for (const s of stations) {
     switch (s.kind) {
-      case 'pile':
-        if (inRect(s.zones.take, x, y)) return { station: s, zone: 'take' };
+      case 'dump':
+        // The field itself isn't a zone: pieces are picked up by walking near them.
         if (inRect(s.zones.return, x, y)) return { station: s, zone: 'return' };
         break;
       case 'processor':

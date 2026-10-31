@@ -105,8 +105,37 @@ const water = pixelArt(
   { outline: false },
 );
 
+/** Trampled dump ground: darker than the yard, with specks of debris. (Stains per tile repeated in a grid.) */
+function dumpGround(seed: number): Draw {
+  return pixelArt(
+    (p) => {
+      const rand = seededRandom(seed);
+      p.rect(0, 0, p.w, p.h, '#93704b');
+      speckle(p, rand, '#7a5b3b', 26);
+      speckle(p, rand, C.scrapGrey, 6);
+      speckle(p, rand, C.rust, 5);
+      cutDiamond(p);
+    },
+    { outline: false },
+  );
+}
+
 /** Ground tile art. Fences, trees and other upright things are drawn on top as objects. */
-export const TILESET: readonly Draw[] = [dirt(1), dirt(2), dirt(3), concrete, road, grass(51), grass(52), water];
+export const TILESET: readonly Draw[] = [
+  dirt(1),
+  dirt(2),
+  dirt(3),
+  concrete,
+  road,
+  grass(51),
+  grass(52),
+  water,
+  dumpGround(60),
+  dumpGround(61),
+  dumpGround(62),
+  dumpGround(63),
+  dumpGround(65),
+];
 
 const VARIANTS = 3;
 
@@ -124,6 +153,8 @@ export function tilesetIndex(tile: TileId, x: number, y: number): number {
       return 5 + (pick % 2);
     case Tile.Water:
       return 7;
+    case Tile.Dump:
+      return 8 + (pick % 5);
     default:
       return pick % VARIANTS;
   }

@@ -5,15 +5,17 @@ import { boxHitsSolid, isSolid, parseGrid, Tile, tileAt } from '../src/sim/grid'
 describe('parseGrid', () => {
   it('parses the M1 yard with its stations', () => {
     const grid = parseGrid(YARD, STATIONS);
-    expect(grid.width).toBe(34);
-    expect(grid.height).toBe(26);
-    expect(grid.playerStart).toEqual({ x: 9.5, y: 16.5 });
+    expect(grid.width).toBe(46);
+    expect(grid.height).toBe(30);
+    expect(grid.playerStart).toEqual({ x: 10.5, y: 21.5 });
     expect(tileAt(grid, 2, 3)).toBe(Tile.Fence);
-    expect(tileAt(grid, 0, 11)).toBe(Tile.Road);
-    expect(tileAt(grid, 0, 25)).toBe(Tile.Water);
-    // Station footprints are solid.
-    expect(isSolid(grid, 10, 9)).toBe(true);
-    expect(isSolid(grid, 12, 9)).toBe(false);
+    expect(tileAt(grid, 0, 12)).toBe(Tile.Road);
+    expect(tileAt(grid, 0, 29)).toBe(Tile.Water);
+    expect(tileAt(grid, 10, 12)).toBe(Tile.Dump);
+    // Machine footprints are solid; the dump site is walkable.
+    expect(isSolid(grid, 21, 11)).toBe(true);
+    expect(isSolid(grid, 23, 11)).toBe(false);
+    expect(isSolid(grid, 10, 12)).toBe(false);
   });
 
   it('rejects ragged rows, unknown characters, a missing start and off-map stations', () => {

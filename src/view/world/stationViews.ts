@@ -5,18 +5,21 @@ import { TRUCK_ROUTE } from '../../data/layout';
 import { itemName, t } from '../../i18n';
 import type { Simulation } from '../../sim/simulation';
 import { secondsToTicks } from '../../sim/state';
-import type { BinDef, PileDef, ProcessorDef, StationDef } from '../../sim/stations';
+import type { BinDef, DumpDef, ProcessorDef, StationDef } from '../../sim/stations';
+import { pieceFrame } from '../art/scrap';
 import { processorStatus, trayTotal } from '../../sim/systems/processing';
 import { binCapacity, processorCycleTicks } from '../../sim/effective';
 import { currentObjective } from '../../sim/systems/objectives';
-import { UPGRADES, upgradeCost } from '../../data/upgrades';
+import { UPGRADES, upgradeCost, type UpgradeId } from '../../data/upgrades';
+import { businessLevel } from '../../data/balance';
+import type { StringKey } from '../../i18n';
 import type { CashPadDef } from '../../sim/stations';
-import { BIN_FRAME, BIN_LEVELS, PILE_FRAME, PILE_STAGES, SHREDDER_FRAME, SHREDDER_LAMP_OFFSET, TRUCK_FRAME } from '../art/stations';
+import { BIN_FRAME, BIN_LEVELS, SHREDDER_FRAME, SHREDDER_LAMP_OFFSET, TRUCK_FRAME } from '../art/stations';
 import { depthAt, toScreen, type IsoProjection } from '../iso';
 import { FRAME, TEX } from '../keys';
 import { placeFrame } from './decor';
 import { LABEL_DEPTH, type Labels } from './labels';
-import { CHUTE_FRAME, FACTORY_FRAME, LINE_LAMP_HEIGHT, lineWindowPoint } from '../art/factory';
+import { FACTORY_FRAME, LINE_LAMP_HEIGHT, lineWindowPoint } from '../art/factory';
 import { ART_SCALE } from '../art/pixel';
 import { padFrame } from '../art/stations';
 import type { FactoryDef } from '../../sim/stations';
@@ -39,22 +42,71 @@ function level(count: number, capacity: number, levels: number): number {
   return 1 + Math.min(levels - 3, Math.floor((count / capacity) * (levels - 2)));
 }
 
-class PileView implements View {
-  private readonly image: Phaser.GameObjects.Image;
-  private readonly label: Phaser.GameObjects.Text;
+/** How long a delivered piece takes to drop onto the field, and how long a pick-up takes to fly to the player. */
+const LAND_MS = 420;
+const COLLECT_MS = 160;
 
-  constructor(scene: Phaser.Scene, proj: IsoProjection, labels: Labels, private readonly def: PileDef) {
-    const { x, y, w, h } = def.rect;
-    this.image = placeFrame(scene, proj, FRAME.pile(0), x + w, y + h, PILE_FRAME, depthAt(x + w / 2, y + h / 2));
-    this.label = labels.add();
-    const top = toScreen(proj, x + w / 2, y + h / 2);
-    this.label.setPosition(top.x, top.y - 60);
+/**
+ * The dump site: one sprite per scrap piece. New pieces drop in with a bounce; collected ones zip to the
+ * player and vanish. Sprites ease towards their piece's position, so the magnet pull looks smooth.
+ */
+class FieldView implements View {
+  private readonly sprites = new Map<number, Phaser.GameObjects.Image>();
+  private readonly label: Phaser.GameObjects.Text;
+  private readonly at = { x: 0, y: 0 };
+  private primed = false;
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly proj: IsoProjection,
+    labels: Labels,
+    private readonly def: DumpDef,
+    private readonly playerAt: () => { x: number; y: number },
+  ) {
+    const top = toScreen(proj, def.rect.x + def.rect.w / 2, def.rect.y);
+    this.label = labels.add(13, '#ffe0b0').setPosition(top.x, top.y - 4);
   }
 
   update(sim: Simulation): void {
-    const items = sim.state.piles[this.def.id]!.items;
-    this.image.setFrame(FRAME.pile(level(items, this.def.capacity, PILE_STAGES)));
-    this.label.setText(`${items}/${this.def.capacity}`);
+    const pieces = sim.state.field.pieces;
+    const seen = new Set<number>();
+    for (const piece of pieces) {
+      seen.add(piece.id);
+      toScreen(this.proj, piece.x, piece.y, this.at);
+      let sprite = this.sprites.get(piece.id);
+      if (!sprite) {
+        const frame = pieceFrame(piece.kind);
+        sprite = this.scene.add.image(this.at.x, this.at.y, TEX.atlas, FRAME.piece(piece.kind)).setOrigin(0.5, frame.originY);
+        this.sprites.set(piece.id, sprite);
+        // Pieces already on the field when the scene starts just appear; new ones drop in.
+        if (this.primed) {
+          sprite.y -= 70;
+          this.scene.tweens.add({ targets: sprite, y: this.at.y, duration: LAND_MS, ease: 'Bounce.easeOut' });
+        }
+      } else if (!this.scene.tweens.isTweening(sprite)) {
+        sprite.x += (this.at.x - sprite.x) * 0.5;
+        sprite.y += (this.at.y - sprite.y) * 0.5;
+      }
+      sprite.setDepth(depthAt(piece.x, piece.y));
+    }
+    for (const [id, sprite] of this.sprites) {
+      if (seen.has(id)) continue;
+      this.sprites.delete(id);
+      const to = this.playerAt();
+      this.scene.tweens.killTweensOf(sprite);
+      this.scene.tweens.add({
+        targets: sprite,
+        x: to.x,
+        y: to.y - 60,
+        scale: 0.5,
+        alpha: 0,
+        duration: COLLECT_MS,
+        ease: 'Quad.easeIn',
+        onComplete: () => sprite.destroy(),
+      });
+    }
+    this.primed = true;
+    this.label.setText(t('dump.title', { count: pieces.length }));
   }
 }
 
@@ -209,8 +261,10 @@ class CashPadView implements View {
     const id = this.def.upgrade;
     const level = sim.state.upgrades[id];
     const max = level >= UPGRADES[id].maxLevel;
-    this.title.setText(t(UPGRADE_NAME[id], { level: Math.min(level + 1, UPGRADES[id].maxLevel) }));
-    this.price.setText(max ? t('upgrade.max') : `$${upgradeCost(id, level)}`);
+    this.title.setText(t(`upgrade.${id}` as StringKey, { level: Math.min(level + 1, UPGRADES[id].maxLevel) }));
+    const lock = lockReason(id, sim);
+    this.price.setText(max ? t('upgrade.max') : (lock ?? `$${upgradeCost(id, level)}`));
+    this.price.setColor(lock ? '#9fb3c8' : '#ffd76a');
     this.bar.clear();
     const paid = sim.state.upgradePaid[id];
     if (!max && paid > 0) {
@@ -221,12 +275,18 @@ class CashPadView implements View {
   }
 }
 
-const UPGRADE_NAME = {
-  carry: 'upgrade.carry',
-  shredderSpeed: 'upgrade.shredderSpeed',
-  binSize: 'upgrade.binSize',
-  supply: 'upgrade.supply',
-} as const;
+/** Why an upgrade pad won't take money yet, as display text; undefined when it's available. */
+function lockReason(id: UpgradeId, sim: Simulation): string | undefined {
+  const def = UPGRADES[id];
+  if (def.requiresLevel && businessLevel(sim.state.earned) < def.requiresLevel) {
+    return t('locked.level', { level: def.requiresLevel });
+  }
+  if (def.requiresLine && !sim.state.lines[def.requiresLine]?.built) {
+    const line = sim.factoryLine(def.requiresLine);
+    return t('locked.line', { name: line ? t(line.name) : def.requiresLine });
+  }
+  return undefined;
+}
 
 /** A bobbing arrow over the zone the current objective is about, when hints are on. */
 export class HintArrowView {
@@ -266,7 +326,7 @@ interface LineIndicators {
 /**
  * The factory building. Each built line lights a lamp over its window, with a progress ring while it
  * works and "Needs Iron" when its bin runs short. The build pad in front sells the next line until all
- * are built. Chutes from the bins appear as their lines are built.
+ * are built.
  */
 class FactoryView implements View {
   private readonly title: Phaser.GameObjects.Text;
@@ -275,7 +335,6 @@ class FactoryView implements View {
   private readonly buildPrice: Phaser.GameObjects.Text;
   private readonly buildBar: Phaser.GameObjects.Graphics;
   private readonly lines: LineIndicators[] = [];
-  private readonly chutes: { image: Phaser.GameObjects.Image; line: string }[] = [];
 
   constructor(scene: Phaser.Scene, proj: IsoProjection, labels: Labels, private readonly def: FactoryDef) {
     const { x, y, w, h } = def.rect;
@@ -283,14 +342,6 @@ class FactoryView implements View {
     placeFrame(scene, proj, FRAME.factory, x + w, y + h, FACTORY_FRAME, depth);
     const roof = toScreen(proj, x + w / 2, y + h / 2);
     this.title = labels.add(13, '#ffd0c8').setPosition(roof.x, roof.y - 58);
-
-    for (const chute of def.chutes) {
-      for (let i = 0; i < chute.length; i++) {
-        const cx = chute.x + i;
-        const image = placeFrame(scene, proj, FRAME.chute, cx + 1, chute.y + 1, CHUTE_FRAME, depthAt(cx + 0.5, chute.y + 0.5));
-        this.chutes.push({ image, line: chute.line });
-      }
-    }
 
     def.lines.forEach((_line, i) => {
       const [gx, gy] = lineWindowPoint(def.rect, i);
@@ -322,14 +373,13 @@ class FactoryView implements View {
       ind.lamp.setVisible(status !== 'unbuilt').setFrame(FRAME.lamp(status === 'processing' ? 'processing' : 'idle'));
       ind.ring.clear();
       if (status === 'processing') {
-        const fraction = Math.min(1, (st.progress + sim.alpha) / batchTicks(line));
+        const fraction = Math.min(1, (st.progress + sim.alpha) / batchTicks(line, state));
         ind.ring.lineStyle(4, 0x5cc84a, 1).beginPath();
         ind.ring.arc(0, 0, 12, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2).strokePath();
       }
       const missing = status === 'starved' ? missingInput(line, binDefs, state.bins) : undefined;
       ind.note.setText(missing ? t('station.needs', { item: itemName(missing) }) : '');
     });
-    for (const chute of this.chutes) chute.image.setVisible(state.lines[chute.line]?.built ?? false);
 
     const next = nextUnbuiltLine(this.def, state);
     this.buildPad.setVisible(!!next);
@@ -339,7 +389,9 @@ class FactoryView implements View {
     if (!next) return;
     const index = this.def.lines.indexOf(next) + 1;
     this.buildTitle.setText(t('build.line', { n: index, name: t(next.name) }));
-    this.buildPrice.setText(`$${next.buildCost}`);
+    const locked = next.requiresLevel && businessLevel(state.earned) < next.requiresLevel;
+    this.buildPrice.setText(locked ? t('locked.level', { level: next.requiresLevel! }) : `$${next.buildCost}`);
+    this.buildPrice.setColor(locked ? '#9fb3c8' : '#ffd76a');
     const paid = state.buildPaid[next.id] ?? 0;
     if (paid > 0) {
       const width = 44;
@@ -359,13 +411,15 @@ export function createStationViews(
   proj: IsoProjection,
   labels: Labels,
   stations: readonly StationDef[],
+  /** The player's feet on screen, for pick-up animations. */
+  playerAt: () => { x: number; y: number },
 ): StationViews {
   const views: View[] = [new TruckView(scene, proj, labels)];
   const bins = new Map<string, BinView>();
   for (const def of stations) {
     switch (def.kind) {
-      case 'pile':
-        views.push(new PileView(scene, proj, labels, def));
+      case 'dump':
+        views.push(new FieldView(scene, proj, labels, def, playerAt));
         break;
       case 'processor':
         views.push(new ProcessorView(scene, proj, labels, def));

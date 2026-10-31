@@ -48,6 +48,8 @@ describe('building lines', () => {
     expect(state.buildPaid.press).toBe(50);
     expect(state.lines.press!.built).toBe(false);
 
+    // The Can line needs business level 2.
+    state.earned = 150;
     state.money = 1000;
     const events = standAt(state, pad.x, pad.y, 400, [], () => state.lines['can-line']!.built);
     expect(state.lines.press!.built).toBe(true);
@@ -68,7 +70,7 @@ describe('a production line', () => {
   it('pulls a batch from its bin and sells the product the moment it is made', () => {
     const state = withPress();
     state.bins['bin-iron']!.count = 7;
-    const events = runPress(state, batchTicks(press));
+    const events = runPress(state, batchTicks(press, state));
     expect(state.bins['bin-iron']!.count).toBe(7 - PRESS.inputs.iron!);
     expect(state.money).toBe(PRICES.sheet);
     expect(state.earned).toBe(PRICES.sheet);
@@ -104,21 +106,24 @@ describe('selling from bins', () => {
   });
 
   it('keeps sell pads off the walking routes between stations', () => {
-    // Straight-line routes the player walks every loop: pile → shredder input → shredder output →
-    // each bin's drop-off, and from the bins to the factory's build pad.
-    const pile = STATIONS.find((s) => s.id === 'pile')!;
+    // Straight-line routes the player walks: from anywhere on the dump field's edge facing the shredder
+    // → shredder input → shredder output, then from the output to each bin's drop-off, and from each bin
+    // to the factory's build pad.
+    const dump = STATIONS.find((s) => s.id === 'dump')!;
     const shredder = STATIONS.find((s) => s.id === 'shredder')!;
     const centre = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
-    const stops = [
-      centre((pile.zones as { take: Rect }).take),
-      centre((shredder.zones as { input: Rect }).input),
-      centre((shredder.zones as { output: Rect }).output),
-      ...bins.map((b) => centre(b.zones.deposit)),
-      centre(factory.zones.build),
-    ];
-    for (let i = 0; i + 1 < stops.length; i++) {
-      const a = stops[i]!;
-      const b = stops[i + 1]!;
+    const field = dump.rect;
+    const fieldEdge = [0, 0.25, 0.5, 0.75, 1].map((t) => ({ x: field.x + field.w, y: field.y + field.h * t }));
+    const input = centre((shredder.zones as { input: Rect }).input);
+    const output = centre((shredder.zones as { output: Rect }).output);
+    const build = centre(factory.zones.build);
+    const routes = [
+      ...fieldEdge.map((p) => [p, input]),
+      [input, output],
+      ...bins.map((b) => [output, centre(b.zones.deposit)]),
+      ...bins.map((b) => [centre(b.zones.deposit), build]),
+    ] as const;
+    for (const [i, [a, b]] of routes.entries()) {
       for (let t = 0; t <= 1; t += 0.01) {
         const x = a.x + (b.x - a.x) * t;
         const y = a.y + (b.y - a.y) * t;

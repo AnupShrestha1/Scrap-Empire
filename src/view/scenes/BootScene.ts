@@ -15,18 +15,17 @@ import {
   ARROW_FRAME,
   drawArrow,
   drawLamp,
-  drawPile,
   drawShredder,
   drawTruck,
   ITEM_FRAME,
   LAMP_FRAME,
-  PILE_FRAME,
-  PILE_STAGES,
   SHREDDER_FRAME,
   TRUCK_FRAME,
 } from '../art/stations';
 import { AtlasBuilder } from '../art/textures';
-import { CHUTE_FRAME, drawChute, drawFactory, FACTORY_FRAME } from '../art/factory';
+import { drawFactory, FACTORY_FRAME } from '../art/factory';
+import { drawPiece, pieceFrame } from '../art/scrap';
+import { PIECE_KINDS } from '../../data/scrap';
 import { FRAME, SCENE, TEX } from '../keys';
 
 const STATUSES = ['idle', 'processing', 'ready', 'blocked'] as const;
@@ -49,10 +48,13 @@ export class BootScene extends Phaser.Scene {
     for (let v = 0; v < TREE_VARIANTS; v++) atlas.add(FRAME.tree(v), TREE_FRAME.w, TREE_FRAME.h, drawTree(v));
     atlas.add(FRAME.lampPost, LAMP_POST_FRAME.w, LAMP_POST_FRAME.h, drawLampPost);
     atlas.add(FRAME.booth, BOOTH_FRAME.w, BOOTH_FRAME.h, drawBooth);
-    for (let s = 0; s < PILE_STAGES; s++) atlas.add(FRAME.pile(s), PILE_FRAME.w, PILE_FRAME.h, drawPile(s));
+    PIECE_KINDS.forEach((_k, kind) => {
+      const size = pieceFrame(kind);
+      atlas.add(FRAME.piece(kind), size.w, size.h, drawPiece(kind));
+    });
     for (let f = 0; f < 2; f++) atlas.add(FRAME.shredder(f), SHREDDER_FRAME.w, SHREDDER_FRAME.h, drawShredder(f));
     for (const s of STATUSES) atlas.add(FRAME.lamp(s), LAMP_FRAME.w, LAMP_FRAME.h, drawLamp(s));
-    for (const item of ['iron', 'aluminium'] as const) {
+    for (const item of ['iron', 'aluminium', 'copper'] as const) {
       for (let l = 0; l < BIN_LEVELS; l++) atlas.add(FRAME.bin(item, l), BIN_FRAME.w, BIN_FRAME.h, drawBin(item, l));
     }
     atlas.add(FRAME.truck(false), TRUCK_FRAME.w, TRUCK_FRAME.h, drawTruck(false));
@@ -64,7 +66,6 @@ export class BootScene extends Phaser.Scene {
     }
     atlas.add(FRAME.arrow, ARROW_FRAME.w, ARROW_FRAME.h, drawArrow);
     atlas.add(FRAME.factory, FACTORY_FRAME.w, FACTORY_FRAME.h, drawFactory);
-    atlas.add(FRAME.chute, CHUTE_FRAME.w, CHUTE_FRAME.h, drawChute);
     atlas.commit(this.textures, TEX.atlas);
 
     this.scene.start(SCENE.world);

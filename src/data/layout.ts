@@ -1,109 +1,131 @@
-// The Milestone 1 yard. Grid x runs down-right on screen and y down-left, so the chain
-// (gate → pile → shredder → bins) reads from the top-left of the screen towards the bottom-right.
+// The yard. Grid x runs down-right on screen and y down-left, so the chain (gate → dump site → shredder
+// → bins → factory) reads from the top-left of the screen towards the bottom-right.
 //
-// Ground:  .  dirt      :  concrete   =  road      g  grass     ~  water (solid)
+// Ground:  .  dirt      :  concrete   =  road      g  grass     ~  water (solid)   d  dump ground
 // Solid:   #  fence     T  tree       L  lamp post B  guard booth   x  crate
 // Other:   P  player start (dirt)
 //
-// Stations (machines, piles, bins) are listed separately below; their footprints are solid.
+// Stations (machines, bins, the dump site) are listed separately below. Machine and bin footprints are
+// solid; the dump site and pads are walkable.
+//
+// Pad rule (see docs and tests): pads that sell, spend or take items back never sit on a walking route.
+// Routes: dump field → shredder input → shredder output → each bin's drop-off → factory build pad.
 
 import type { StationDef } from '../sim/stations';
 import type { UpgradeId } from './upgrades';
-import { BINS, BUILD_COSTS, CAN_LINE, PRESS, PILE, SHREDDER } from './balance';
+import { BINS, BUILD_COSTS, CAN_LINE, FIELD, PRESS, SHREDDER } from './balance';
 
 export const YARD: readonly string[] = [
-  'gTggggggTgTTgTTTTggggTggTgTgTTgggg',
-  'ggTTTgTTgTggTggTTggTggTgTTgggTgTgT',
-  'Tggggggggggggggggggggggggggggggggg',
-  'gg############################gTgT',
-  'gg#..........................#ggTT',
-  'gg#.................L......xx#gTTg',
-  'gg#...........:::::.........x#gTTg',
-  'Tg#...........:::::..........#gTgT',
-  'gg#......::::::::::..........#gTgg',
-  'TB#......::::::::::..........#gTgT',
-  'gg#......::::::::::..........#gTgg',
-  '=========::::::::::..........#gTTT',
-  '=========::::::::::..........#gTgT',
-  'gg#...........:::::..........#gggg',
-  'gg#......L....:::::..........#ggTT',
-  'gg#..........................#gTgg',
-  'gg#......P..............L....#gggg',
-  'Tg#........................x.#gggg',
-  'Tg#........................x.#gggg',
-  'Tg#..........................#gTTT',
-  'Tg############################gggT',
-  'gggggggggggggggggggggggg~~~~~~~~~~',
-  'TTggggTgTgTTgT~~~~~~~~~~~~~~~~~~~~',
-  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
-  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
-  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  'gTggggggTgTTgTTTTggggTggTgTgTTggggggTTTgTTgTgg',
+  'TggTTggTggTgTTgggTgTgTTggggTgTggTTgTTggTTgTTgT',
+  'gggggggggggggggggggggggggggggggggggggggggggTgg',
+  'Tg########################################gTgT',
+  'Tg#......................................#gggT',
+  'Tg#............................L......xx.#gTTg',
+  'Tg#.dddddddddddddd.....................x.#gggg',
+  'gg#.dddddddddddddd........::::...........#ggTT',
+  'gg#.dddddddddddddd........::::...........#gTgg',
+  'gg#.dddddddddddddd.::::::.::::...........#gggg',
+  'TB#.dddddddddddddd.::::::.::::...........#gggg',
+  'gg#.dddddddddddddd.::::::.::::...........#gTgg',
+  '====dddddddddddddd.::::::.::::...........#ggTT',
+  '====dddddddddddddd.::::::.::::...........#gTTT',
+  'gg#.dddddddddddddd.::::::.::::...........#gggT',
+  'gg#.dddddddddddddd.::::::.::::...........#gTTg',
+  'gg#.dddddddddddddd........::::...........#gggT',
+  'gg#.dddddddddddddd.L......::::...........#gTgT',
+  'Tg#.dddddddddddddd........::::...........#ggTg',
+  'Tg#.dddddddddddddd........::::...........#gTgg',
+  'gg#.......................::::...........#ggTg',
+  'Tg#.......P..............................#gggT',
+  'gg#.L..........................L.........#gggT',
+  'gg#....................................x.#ggTg',
+  'gg#....................................x.#gTgT',
+  'Tg#......................................#gTTg',
+  'gg########################################ggTT',
+  'gggggggggggggggggggg~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
 ];
 
 /**
- * Zones are where the player stands to interact (tested against the player's centre).
- * Processor input sits on the front-left (+y) side and output on the front-right (+x) side,
- * so the player is never hidden behind the machine while using it.
+ * Zones are where the player stands to interact (tested against the player's centre). Machine input sits
+ * on the front-left (+y) side and output on the front-right (+x) side, so the player is never hidden
+ * behind the machine while using it.
  */
 export const STATIONS: readonly StationDef[] = [
   {
-    id: 'pile',
-    kind: 'pile',
-    // On the near side of the road, so the parked truck never hides it.
-    rect: { x: 5, y: 13, w: 2, h: 2 },
-    capacity: PILE.capacity,
-    // Take from the front-left side. Returning scrap is on the gate side, away from the walk to the
-    // shredder, so the player never steps on it by accident.
-    zones: { take: { x: 4, y: 15, w: 4, h: 1 }, return: { x: 4, y: 13, w: 1, h: 2 } },
+    // The dump site: the truck tips scrap here and it lies scattered for the player to collect.
+    id: 'dump',
+    kind: 'dump',
+    rect: { x: 4, y: 6, w: 14, h: 14 },
+    capacity: FIELD.capacity,
+    // Dropping scrap back is on the field's fence side (x 3), a dead end away from the shredder.
+    zones: { field: { x: 4, y: 6, w: 14, h: 14 }, return: { x: 3, y: 16, w: 1, h: 2 } },
   },
   {
     id: 'shredder',
     kind: 'processor',
-    rect: { x: 10, y: 9, w: 2, h: 2 },
+    rect: { x: 21, y: 11, w: 2, h: 2 },
     recipe: SHREDDER,
     speedUpgrade: 'shredderSpeed',
-    zones: { input: { x: 10, y: 11, w: 2, h: 1 }, output: { x: 12, y: 9, w: 1, h: 2 } },
+    zones: { input: { x: 21, y: 13, w: 2, h: 1 }, output: { x: 23, y: 11, w: 1, h: 2 } },
   },
+  // Bins: drop off from the shredder side (x 26) and one end; sell from the other end, a dead end.
   {
     id: 'bin-iron',
     kind: 'bin',
     item: 'iron',
-    rect: { x: 15, y: 7, w: 2, h: 2 },
+    rect: { x: 27, y: 8, w: 2, h: 2 },
     capacity: BINS.capacity,
-    // Drop off from the shredder side (x 14) and the front (row 9). Sell from behind (row 6): a dead end,
-    // off every route (pile → shredder → bins, bins → factory), so nobody sells by walking past.
-    zones: { deposit: { x: 14, y: 7, w: 3, h: 3 }, sell: { x: 15, y: 6, w: 2, h: 1 } },
+    zones: { deposit: { x: 26, y: 8, w: 3, h: 3 }, sell: { x: 27, y: 7, w: 2, h: 1 } },
   },
   {
     id: 'bin-aluminium',
     kind: 'bin',
     item: 'aluminium',
-    rect: { x: 15, y: 11, w: 2, h: 2 },
+    rect: { x: 27, y: 12, w: 2, h: 2 },
     capacity: BINS.capacity,
-    // Drop off from the shredder side and the back (row 10). Sell from the front (row 13), a dead end.
-    zones: { deposit: { x: 14, y: 10, w: 3, h: 3 }, sell: { x: 15, y: 13, w: 2, h: 1 } },
+    zones: { deposit: { x: 26, y: 12, w: 3, h: 3 }, sell: { x: 27, y: 11, w: 2, h: 1 } },
   },
-  // The factory: one building whose production lines pull from the bins through chutes and sell what
-  // they make straight away. Lines are bought, in order, on the build pad in front.
+  {
+    id: 'bin-copper',
+    kind: 'bin',
+    item: 'copper',
+    rect: { x: 27, y: 16, w: 2, h: 2 },
+    capacity: BINS.capacity,
+    zones: { deposit: { x: 26, y: 16, w: 3, h: 3 }, sell: { x: 27, y: 15, w: 2, h: 1 } },
+  },
+  // The factory: one building whose production lines pull straight from the bins and sell what they
+  // make at once. Lines are bought, in order, on the build pad in front.
   {
     id: 'factory',
     kind: 'factory',
-    rect: { x: 19, y: 7, w: 4, h: 6 },
+    rect: { x: 33, y: 9, w: 4, h: 6 },
     lines: [
-      { id: 'press', name: 'machine.press', recipe: PRESS, feeds: ['bin-iron'], buildCost: BUILD_COSTS.press },
-      { id: 'can-line', name: 'machine.canLine', recipe: CAN_LINE, feeds: ['bin-aluminium'], buildCost: BUILD_COSTS.canLine },
+      { id: 'press', name: 'machine.press', recipe: PRESS, feeds: ['bin-iron'], buildCost: BUILD_COSTS.press, speedUpgrade: 'pressSpeed' },
+      {
+        id: 'can-line',
+        name: 'machine.canLine',
+        recipe: CAN_LINE,
+        feeds: ['bin-aluminium'],
+        buildCost: BUILD_COSTS.canLine,
+        requiresLevel: 2,
+        speedUpgrade: 'canSpeed',
+      },
     ],
-    chutes: [
-      { x: 17, y: 7, length: 2, line: 'press' },
-      { x: 17, y: 11, length: 2, line: 'can-line' },
-    ],
-    zones: { build: { x: 20, y: 13, w: 2, h: 1 } },
+    zones: { build: { x: 34, y: 15, w: 2, h: 1 } },
   },
-  // Upgrade pads, each beside what it improves and off the main walking routes.
-  cashPad('pad-supply', 'supply', 6, 6),
-  cashPad('pad-shredder', 'shredderSpeed', 12, 12),
-  cashPad('pad-bins', 'binSize', 15, 15),
-  cashPad('pad-carry', 'carry', 11, 17),
+  // Upgrade pads, each near what it improves and off the walking routes.
+  cashPad('pad-supply', 'supply', 7, 23),
+  cashPad('pad-carry', 'carry', 10, 23),
+  cashPad('pad-magnet', 'magnet', 13, 23),
+  cashPad('pad-shredder', 'shredderSpeed', 20, 9),
+  cashPad('pad-yield', 'shredderYield', 22, 9),
+  cashPad('pad-extraction', 'extraction', 24, 9),
+  cashPad('pad-bins', 'binSize', 30, 20),
+  cashPad('pad-press-speed', 'pressSpeed', 37, 10),
+  cashPad('pad-can-speed', 'canSpeed', 37, 13),
 ];
 
 function cashPad(id: string, upgrade: UpgradeId, x: number, y: number): StationDef {
@@ -111,12 +133,12 @@ function cashPad(id: string, upgrade: UpgradeId, x: number, y: number): StationD
   return { id, kind: 'cashPad', upgrade, rect, zones: { buy: rect } };
 }
 
-/** The supplier truck drives along the road on row `row`, from off-map to its parking spot by the pile. */
+/** The supplier truck drives in along the road on row `row`, parks inside the dump site and tips its load. */
 export const TRUCK_ROUTE = {
-  pile: 'pile',
-  row: 11,
+  dump: 'dump',
+  row: 12,
   /** Tiles long, along grid x. */
   length: 3,
-  startX: -5,
+  startX: -6,
   parkX: 4,
 } as const;

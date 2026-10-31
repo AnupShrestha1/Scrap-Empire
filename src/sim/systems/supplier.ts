@@ -1,16 +1,18 @@
 import { SUPPLIER } from '../../data/balance';
 import { supplyIntervalS, supplyLoad } from '../effective';
 import { TRUCK_PLACE, type SimEvent } from '../events';
+import { PIECE_KINDS } from '../../data/scrap';
 import { secondsToTicks, type GameState } from '../state';
-import type { PileDef } from '../stations';
+import type { DumpDef } from '../stations';
+import { randomKind, scatterPiece } from './field';
 
 /**
- * The supplier truck: arrives on a timer, unloads scrap onto the pile item by item, waits at the
- * gate if the pile is full, then leaves. Returns true if anything changed besides timers.
+ * The supplier truck: arrives on a timer, tips its load onto the dump site piece by piece (they scatter
+ * across the field), waits if the field is full, then leaves. Returns true if anything changed.
  */
-export function stepSupplier(state: GameState, pileDef: PileDef, events: SimEvent[]): boolean {
+export function stepSupplier(state: GameState, dump: DumpDef, events: SimEvent[]): boolean {
   const truck = state.truck;
-  const pile = state.piles[pileDef.id]!;
+  const field = state.field;
   switch (truck.phase) {
     case 'away':
       if (--truck.timer > 0) return false;
@@ -34,19 +36,22 @@ export function stepSupplier(state: GameState, pileDef: PileDef, events: SimEven
         return true;
       }
       if (--truck.timer > 0) return false;
-      if (pile.items >= pileDef.capacity) {
+      if (field.pieces.length >= dump.capacity) {
         truck.phase = 'waiting';
         events.push({ type: 'truckWaiting' });
         return true;
       }
-      pile.items++;
-      truck.load--;
+      {
+        const kind = randomKind(field, truck.load);
+        scatterPiece(field, dump.zones.field, kind);
+        truck.load = Math.max(0, truck.load - PIECE_KINDS[kind]!.units);
+      }
       truck.timer = secondsToTicks(1 / SUPPLIER.unloadPerS);
-      events.push({ type: 'itemMoved', item: SUPPLIER.item, from: TRUCK_PLACE, to: pileDef.id });
+      events.push({ type: 'itemMoved', item: SUPPLIER.item, from: TRUCK_PLACE, to: dump.id });
       return true;
 
     case 'waiting':
-      if (pile.items >= pileDef.capacity) return false;
+      if (field.pieces.length >= dump.capacity) return false;
       truck.phase = 'unloading';
       truck.timer = 1;
       return true;

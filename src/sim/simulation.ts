@@ -2,11 +2,13 @@ import { SIM, TICK_MS } from '../config';
 import type { ProcessorStatus, SimEvent } from './events';
 import type { Grid } from './grid';
 import type { GameState } from './state';
-import type { BinDef, FactoryDef, LineDef, PileDef, ProcessorDef, StationDef } from './stations';
+import type { BinDef, DumpDef, FactoryDef, LineDef, ProcessorDef, StationDef } from './stations';
+import { stepField } from './systems/field';
 import { stepLine } from './systems/manufacturing';
 import { newInteractionState, stepInteraction, type InteractionState } from './systems/interaction';
 import { stepPlayer } from './systems/player';
-import { processorCycleTicks } from './effective';
+import { processorCycleTicks, processorOutputs } from './effective';
+import { businessLevel } from '../data/balance';
 import { stepObjectives } from './systems/objectives';
 import { processorStatus, stepProcessor } from './systems/processing';
 import { stepSupplier } from './systems/supplier';
@@ -34,20 +36,20 @@ export class Simulation {
   private readonly events: SimEvent[] = [];
   private readonly interaction: InteractionState = newInteractionState();
   private readonly statuses = new Map<string, ProcessorStatus>();
-  private readonly truckPile: PileDef;
+  private readonly dump: DumpDef;
   private readonly processorDefs: readonly ProcessorDef[];
   private readonly factories: readonly FactoryDef[];
   /** Bin definitions by id, for machines that pull from them. */
   readonly binDefs: ReadonlyMap<string, BinDef>;
 
-  constructor(state: GameState, grid: Grid, stations: readonly StationDef[], truckPileId: string) {
+  constructor(state: GameState, grid: Grid, stations: readonly StationDef[], dumpId: string) {
     this.state = state;
     this.grid = grid;
     this.stations = stations;
     this.prevPlayer = { x: state.player.x, y: state.player.y };
-    const pile = stations.find((s): s is PileDef => s.kind === 'pile' && s.id === truckPileId);
-    if (!pile) throw new Error(`Truck route needs pile '${truckPileId}'`);
-    this.truckPile = pile;
+    const dump = stations.find((s): s is DumpDef => s.kind === 'dump' && s.id === dumpId);
+    if (!dump) throw new Error(`Truck route needs dump site '${dumpId}'`);
+    this.dump = dump;
     this.processorDefs = stations.filter((s): s is ProcessorDef => s.kind === 'processor');
     this.factories = stations.filter((s): s is FactoryDef => s.kind === 'factory');
     this.binDefs = new Map(stations.filter((s): s is BinDef => s.kind === 'bin').map((b) => [b.id, b]));
@@ -101,16 +103,18 @@ export class Simulation {
   private step(): void {
     const { state, events } = this;
     const firstEvent = events.length;
+    const levelBefore = businessLevel(state.earned);
     const p = state.player;
     this.prevPlayer.x = p.x;
     this.prevPlayer.y = p.y;
     let changed = stepPlayer(p, this.move, this.grid, TICK_MS / 1000);
+    changed = stepField(state, this.dump, TICK_MS / 1000, events) || changed;
     changed = stepInteraction(state, this.stations, this.interaction, events) || changed;
-    changed = stepSupplier(state, this.truckPile, events) || changed;
+    changed = stepSupplier(state, this.dump, events) || changed;
     for (const def of this.processorDefs) {
       const machine = state.processors[def.id]!;
       const cycle = processorCycleTicks(def, state);
-      changed = stepProcessor(def, machine, cycle, events) || changed;
+      changed = stepProcessor(def, machine, cycle, events, processorOutputs(def, state)) || changed;
       const status = processorStatus(def, machine, cycle);
       if (status !== this.statuses.get(def.id)) {
         this.statuses.set(def.id, status);
@@ -122,8 +126,12 @@ export class Simulation {
         changed = stepLine(factory, line, state.lines[line.id]!, this.binDefs, state, events) || changed;
       }
     }
+    const levelAfter = businessLevel(state.earned);
+    if (levelAfter > levelBefore) events.push({ type: 'levelUp', level: levelAfter });
     // Objectives look at this tick's events only (earlier ones may not have been drained yet).
     changed = stepObjectives(state, events.slice(firstEvent), events) || changed;
+    const levelAfterRewards = businessLevel(state.earned);
+    if (levelAfterRewards > levelAfter) events.push({ type: 'levelUp', level: levelAfterRewards });
     if (changed) this.dirty = true;
     state.tick++;
   }

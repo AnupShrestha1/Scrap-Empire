@@ -1,9 +1,11 @@
-import { PILE, SUPPLIER } from '../data/balance';
+import { FIELD, SUPPLIER } from '../data/balance';
+import { PIECE_KINDS } from '../data/scrap';
 import { emptyItemCounts, isItemId, ITEM_IDS, type ItemId } from '../data/items';
 import { PLAYER } from '../data/player';
 import { SIM } from '../config';
 import { emptyUpgradeCounts, UPGRADE_IDS, type UpgradeId } from '../data/upgrades';
 import { boxHitsSolid, type Grid } from './grid';
+import { randomKind, scatterPiece } from './systems/field';
 import type { StationDef } from './stations';
 
 export type Facing = 'up' | 'down' | 'left' | 'right';
@@ -18,8 +20,23 @@ export interface PlayerState {
   stack: ItemId[];
 }
 
-export interface PileState {
-  items: number;
+/** A piece of scrap lying on the dump site. */
+export interface FieldPiece {
+  id: number;
+  /** Position in tiles. */
+  x: number;
+  y: number;
+  /** Index into PIECE_KINDS. */
+  kind: number;
+}
+
+export interface FieldState {
+  pieces: FieldPiece[];
+  /** Seed of the field's own random generator, so scatter is reproducible and survives saves. */
+  seed: number;
+  nextId: number;
+  /** Scrap units still to scatter (from an old save's pile); sanitizeState scatters them. */
+  pendingUnits?: number;
 }
 
 export interface ProcessorState {
@@ -70,7 +87,7 @@ export interface GameState {
   objectives: { index: number; progress: number };
   player: PlayerState;
   truck: TruckState;
-  piles: Record<string, PileState>;
+  field: FieldState;
   processors: Record<string, ProcessorState>;
   bins: Record<string, BinState>;
   /** Factory production lines, by line id. */
@@ -97,7 +114,7 @@ export function createNewGame(grid: Grid, stations: readonly StationDef[]): Game
     objectives: { index: 0, progress: 0 },
     player: { x: grid.playerStart.x, y: grid.playerStart.y, facing: 'down', stack: [] },
     truck: { phase: 'away', timer: secondsToTicks(SUPPLIER.firstDeliveryS), load: 0 },
-    piles: {},
+    field: { pieces: [], seed: 20261031, nextId: 0, pendingUnits: FIELD.startUnits },
     processors: {},
     bins: {},
     lines: {},
@@ -126,7 +143,7 @@ export function isGameState(value: unknown): value is GameState {
     TRUCK_PHASES.includes(truck.phase as string) &&
     isCount(truck.timer) &&
     isCount(truck.load) &&
-    isMapOf(value.piles, (p) => isCount(p.items)) &&
+    isField(value.field) &&
     isMapOf(value.bins, (b) => isCount(b.count)) &&
     isMapOf(value.lines, (l) => typeof l.built === 'boolean' && isCount(l.progress)) &&
     isRecord(value.buildPaid) &&
@@ -143,16 +160,22 @@ export function isGameState(value: unknown): value is GameState {
  * ones, clamps counts to capacities and moves a player who would be inside something back to the start.
  */
 export function sanitizeState(state: GameState, grid: Grid, stations: readonly StationDef[]): GameState {
-  const piles: Record<string, PileState> = {};
   const processors: Record<string, ProcessorState> = {};
   const bins: Record<string, BinState> = {};
   const lines: Record<string, LineState> = {};
   const buildPaid: Record<string, number> = {};
   for (const s of stations) {
     switch (s.kind) {
-      case 'pile': {
-        const items = state.piles[s.id]?.items ?? PILE.startItems;
-        piles[s.id] = { items: Math.min(items, s.capacity) };
+      case 'dump': {
+        // Scatter anything owed (a new game's starting scrap, or an old save's pile).
+        const field = state.field;
+        let units = field.pendingUnits ?? 0;
+        while (units > 0) {
+          const kind = randomKind(field, units);
+          scatterPiece(field, s.zones.field, kind);
+          units -= PIECE_KINDS[kind]!.units;
+        }
+        delete field.pendingUnits;
         break;
       }
       case 'processor':
@@ -172,7 +195,6 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
         break;
     }
   }
-  state.piles = piles;
   state.processors = processors;
   state.bins = bins;
   state.lines = lines;
@@ -185,6 +207,19 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
     p.y = grid.playerStart.y;
   }
   return state;
+}
+
+function isField(value: unknown): boolean {
+  if (!isRecord(value) || !Array.isArray(value.pieces) || !isCount(value.nextId) || !isCount(value.seed)) return false;
+  return value.pieces.every(
+    (p: unknown) =>
+      isRecord(p) &&
+      isCount(p.id) &&
+      Number.isFinite(p.x) &&
+      Number.isFinite(p.y) &&
+      isCount(p.kind) &&
+      (p.kind as number) < PIECE_KINDS.length,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

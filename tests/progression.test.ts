@@ -106,7 +106,7 @@ describe('objectives', () => {
     const out: SimEvent[] = [];
     stepObjectives(state, [{ type: 'itemMoved', item: 'scrap', from: 'truck', to: 'pile' }], out);
     expect(state.objectives.index).toBe(0);
-    stepObjectives(state, [{ type: 'itemMoved', item: 'scrap', from: 'pile', to: 'player' }], out);
+    stepObjectives(state, [{ type: 'itemMoved', item: 'scrap', from: 'dump', to: 'player' }], out);
     expect(state.objectives.index).toBe(1);
     expect(state.money).toBe(OBJECTIVES[0]!.reward);
     expect(out).toContainEqual({ type: 'objectiveDone', objective: 'pickScrap', reward: OBJECTIVES[0]!.reward });
@@ -142,6 +142,7 @@ describe('save v3 → v4', () => {
     expect(state.money).toBe(42);
     expect(state.earned).toBe(42);
     expect(state.upgrades.carry).toBe(0);
+    expect(state.upgrades.extraction).toBe(0);
     expect(state.objectives).toEqual({ index: 0, progress: 0 });
   });
 });

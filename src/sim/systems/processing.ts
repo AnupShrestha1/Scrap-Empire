@@ -24,6 +24,7 @@ export function stepProcessor(
   state: ProcessorState,
   cycle = baseCycleTicks(def),
   events: SimEvent[] = [],
+  outputs: Readonly<Partial<Record<(typeof ITEM_IDS)[number], number>>> = def.recipe.outputs,
 ): boolean {
   if (state.progress === 0) {
     if (state.hopper === 0) return false;
@@ -38,7 +39,7 @@ export function stepProcessor(
   let produced = 0;
   const whole: Partial<Record<(typeof ITEM_IDS)[number], number>> = {};
   for (const id of ITEM_IDS) {
-    const amount = def.recipe.outputs[id];
+    const amount = outputs[id];
     if (!amount) continue;
     const n = Math.floor(state.carry[id] + amount + 1e-9);
     whole[id] = n;
@@ -47,7 +48,7 @@ export function stepProcessor(
   if (trayTotal(state) + produced > def.recipe.tray) return false;
 
   for (const id of ITEM_IDS) {
-    const amount = def.recipe.outputs[id];
+    const amount = outputs[id];
     if (!amount) continue;
     const n = whole[id] ?? 0;
     state.tray[id] += n;

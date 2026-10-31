@@ -1,6 +1,16 @@
 // Upgrades bought on in-world cash pads. Starting numbers from docs/M1_PLAN.md §2.
 
-export const UPGRADE_IDS = ['carry', 'shredderSpeed', 'binSize', 'supply'] as const;
+export const UPGRADE_IDS = [
+  'carry',
+  'magnet',
+  'shredderSpeed',
+  'binSize',
+  'supply',
+  'shredderYield',
+  'extraction',
+  'pressSpeed',
+  'canSpeed',
+] as const;
 export type UpgradeId = (typeof UPGRADE_IDS)[number];
 
 export interface UpgradeDef {
@@ -9,18 +19,29 @@ export interface UpgradeDef {
   /** Each level costs this much more than the last. */
   growth: number;
   maxLevel: number;
+  /** Business level needed before the pad takes payment. */
+  requiresLevel?: number;
+  /** Factory line that must be built first (for line upgrades). */
+  requiresLine?: string;
 }
 
 export const UPGRADES: Readonly<Record<UpgradeId, UpgradeDef>> = {
   carry: { cost: 25, growth: 1.6, maxLevel: 8 },
+  magnet: { cost: 45, growth: 1.6, maxLevel: 6 },
   shredderSpeed: { cost: 40, growth: 1.5, maxLevel: 8 },
   binSize: { cost: 30, growth: 1.5, maxLevel: 8 },
   supply: { cost: 60, growth: 1.7, maxLevel: 8 },
+  shredderYield: { cost: 120, growth: 1.6, maxLevel: 6, requiresLevel: 2 },
+  extraction: { cost: 250, growth: 1.8, maxLevel: 4, requiresLevel: 3 },
+  pressSpeed: { cost: 90, growth: 1.55, maxLevel: 6, requiresLine: 'press' },
+  canSpeed: { cost: 180, growth: 1.55, maxLevel: 6, requiresLine: 'can-line' },
 };
 
 /** What each level does. */
 export const UPGRADE_EFFECTS = {
   carryPerLevel: 3,
+  /** Tiles added to the pick-up pull per Magnet level. */
+  magnetPerLevel: 0.35,
   /** Cycle time is multiplied by this per level. */
   shredderCycleFactor: 0.85,
   binPerLevel: 15,
@@ -28,6 +49,13 @@ export const UPGRADE_EFFECTS = {
   supplyLoadPerStep: 2,
   supplyIntervalPerStepS: 2,
   supplyMinIntervalS: 6,
+  /** Shredder output multiplied by 1 + this per Yield level. */
+  yieldPerLevel: 0.1,
+  /** Copper per scrap at Extraction level 1, and added per further level. */
+  copperBase: 0.15,
+  copperPerLevel: 0.05,
+  /** Line batch time is multiplied by this per speed level. */
+  lineCycleFactor: 0.85,
 } as const;
 
 /** How cash pads take payment. */
@@ -46,5 +74,15 @@ export function upgradeCost(id: UpgradeId, level: number): number {
 }
 
 export function emptyUpgradeCounts(): Record<UpgradeId, number> {
-  return { carry: 0, shredderSpeed: 0, binSize: 0, supply: 0 };
+  return {
+    carry: 0,
+    magnet: 0,
+    shredderSpeed: 0,
+    binSize: 0,
+    supply: 0,
+    shredderYield: 0,
+    extraction: 0,
+    pressSpeed: 0,
+    canSpeed: 0,
+  };
 }

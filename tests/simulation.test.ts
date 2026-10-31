@@ -8,7 +8,7 @@ import { createNewGame } from '../src/sim/state';
 const grid = parseGrid(YARD, STATIONS);
 
 function newSim(): Simulation {
-  const sim = new Simulation(createNewGame(grid, STATIONS), grid, STATIONS, 'pile');
+  const sim = new Simulation(createNewGame(grid, STATIONS), grid, STATIONS, 'dump');
   sim.setMoveInput(1, 0.5);
   return sim;
 }
@@ -41,7 +41,7 @@ describe('Simulation', () => {
   });
 
   it('marks state dirty only when something changed', () => {
-    const sim = new Simulation(createNewGame(grid, STATIONS), grid, STATIONS, 'pile');
+    const sim = new Simulation(createNewGame(grid, STATIONS), grid, STATIONS, 'dump');
     sim.advance(200);
     expect(sim.dirty).toBe(false);
     sim.setMoveInput(0, 1);
