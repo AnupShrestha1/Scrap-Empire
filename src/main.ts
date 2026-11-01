@@ -1,3 +1,6 @@
+import '@fontsource/lilita-one/latin-400.css';
+import '@fontsource/nunito/latin-800.css';
+import '@fontsource/nunito/latin-900.css';
 import './ui/styles.css';
 import { Vector2 } from 'three';
 import type { GameContext } from './context';

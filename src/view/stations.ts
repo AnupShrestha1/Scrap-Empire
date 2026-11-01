@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { METALS } from '../data/items';
 import { businessLevel, ORDERS, STAFF } from '../data/balance';
 import { TRUCK_ROUTE } from '../data/layout';
 import { requiredLevel, UPGRADES, upgradeCost, type UpgradeId } from '../data/upgrades';
@@ -225,10 +226,14 @@ export class BayView implements View {
 export class ShredderView implements View {
   private readonly body = new THREE.Group();
   private readonly cogs: THREE.Object3D[] = [];
-  private readonly tray = new PileProp(['iron', 'aluminium', 'copper']);
+  private readonly tray = new PileProp(METALS, 12);
   private readonly lamp = lamp();
   private readonly ring = new RingGauge(0x5cc84a, 0.8);
   private readonly note: Label;
+  /** A machine bought later: an empty plot with a build pad until then. */
+  private readonly plot?: { ghost: THREE.Object3D; pad: THREE.Object3D; label: Label };
+  private wasBuilt: boolean | null = null;
+  private popAge = Infinity;
 
   constructor(scene: THREE.Object3D, models: Models, labels: LabelMaker, private readonly def: ProcessorDef) {
     const machine = fitToFootprint(models.get('machine'), 2.1);
@@ -253,11 +258,36 @@ export class ShredderView implements View {
     this.note = labels.add('note');
     this.note.at.copy(centre(def.zones.output, 1.4));
     scene.add(this.body, this.lamp, this.ring.root, this.tray.root, new PadProp(def.zones.input.w, def.zones.input.h, '▲', 0x6b6f8a).placeOn(def.zones.input).root);
+    if (def.build && def.zones.build) {
+      const ghost = new PadProp(def.rect.w, def.rect.h, '2', 0x6b6f8a).placeOn(def.rect).root;
+      const pad = new PadProp(def.zones.build.w, def.zones.build.h, '⚒', 0x3a7bd5).placeOn(def.zones.build).root;
+      const label = labels.add('pad-title');
+      label.at.copy(centre(def.zones.build, 0.7));
+      scene.add(ghost, pad);
+      this.plot = { ghost, pad, label };
+    }
   }
 
   update(sim: Simulation, dt: number, timeMs: number, camera: THREE.Camera): void {
     const m = sim.state.processors[this.def.id]!;
-    const cycle = processorCycleTicks(this.def, sim.state);
+    if (this.plot) {
+      // Unbought: the plot and its build pad. Bought: the machine pops in.
+      if (this.wasBuilt === false && m.built) this.popAge = 0;
+      this.wasBuilt = m.built;
+      this.popAge += dt;
+      this.plot.ghost.visible = this.plot.pad.visible = !m.built;
+      const locked = businessLevel(sim.state.earned) < this.def.build!.requiresLevel;
+      if (m.built) setText(this.plot.label, '');
+      else {
+        const price = locked ? t('locked.level', { level: this.def.build!.requiresLevel }) : `$${this.def.build!.cost - (sim.state.buildPaid[this.def.id] ?? 0)}`;
+        padTitle(this.plot.label, t('shredder.build'), price, locked);
+      }
+    }
+    for (const o of [this.body, this.lamp, this.ring.root, this.tray.root]) o.visible = m.built;
+    if (!m.built) return;
+    const k = Math.min(1, this.popAge / 0.5);
+    this.body.scale.setScalar(k < 1 ? Math.max(0.01, Math.sin(k * Math.PI * 0.75) / Math.sin(Math.PI * 0.75)) : 1);
+    const cycle = processorCycleTicks(this.def, sim.state, m);
     const status = processorStatus(this.def, m, cycle);
     const working = status === 'processing';
     this.body.position.x = this.def.rect.x + this.def.rect.w / 2 + (working ? Math.sin(timeMs / 28) * 0.03 : 0);

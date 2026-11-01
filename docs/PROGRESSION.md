@@ -264,3 +264,12 @@ Changes made while tuning: business level thresholds lowered (see 7.4), supply 1
 - A "Sell storage" pad beside the Scrap Dealer opens a card listing each unlocked metal in storage, with "Sell 10" and "Sell all" (user requests).
 - Six buyer truck lanes (user request), one opening per business level from 3 to 8; the east gate road is widened to reach them all and the stall moved south of the lanes.
 
+### 7.8 Playtest fixes (2026-11-01)
+
+- **Pads:** the shredder's upgrade pads sit 3 tiles apart well north of it, and Line speed and the recipe pad sit in front of the factory, so no machine hides them from the camera. Pads wait **1 s**, counted only while the player stands still.
+- **Shredder capacity** upgrade (+5 hopper, +6 tray per level, from level 1), and a **second shredder** bought for $2,500 at business level 4 on a pad beside its plot.
+- **Employees** start at 2 tiles/s carrying 2 (Staff speed and Staff carry upgrades raise them to 4.1 and 8). They now sell overflow so nothing stalls: metal goes to the Scrap Dealer when its bin is full and the tray is filling, and products no truck wants go to the stall when a line is stuck.
+- **Trucks** order any unlocked product, avoiding duplicates, weighted towards what lines make (×3) or what the bins can cover (×2). Lines have **Auto** (on by default): with employees, an idle line switches to what waiting trucks need. Picking a product by hand turns Auto off.
+- **Look:** ingot-shaped metals that shine more the rarer they are, and the scrapyard cartoon UI from the "Scrap Empire cartoon UI" design canvas.
+- **Balance:** with weaker employees the first line still comes at about 4 minutes, but business level 5 moves from about 18 to about 26 minutes in the bot run. Worth tuning (cheaper staff upgrades, or a lower level-5 threshold) after playing.
+

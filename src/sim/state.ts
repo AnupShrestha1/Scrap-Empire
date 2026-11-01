@@ -45,6 +45,8 @@ export interface FieldState {
 }
 
 export interface ProcessorState {
+  /** False for a machine not bought yet (see ProcessorDef.build). */
+  built: boolean;
   /** Inputs waiting to be processed. */
   hopper: number;
   /** Ticks into the current cycle; 0 when not working. */
@@ -65,6 +67,8 @@ export interface LineState {
   built: boolean;
   /** What the line makes (chosen on the factory's recipe pad). */
   product: ProductId;
+  /** Auto: once there are employees, they switch the line to whatever waiting trucks need. */
+  auto: boolean;
   /** Ticks into the current batch; 0 when not working. */
   progress: number;
   /** Finished products waiting on the line's output spot... */
@@ -141,8 +145,8 @@ export function secondsToTicks(seconds: number): number {
   return Math.max(1, Math.round(seconds * SIM.tickRate));
 }
 
-export function newProcessorState(): ProcessorState {
-  return { hopper: 0, progress: 0, tray: emptyItemCounts(), carry: emptyItemCounts(), shredded: 0 };
+export function newProcessorState(built = true): ProcessorState {
+  return { built, hopper: 0, progress: 0, tray: emptyItemCounts(), carry: emptyItemCounts(), shredded: 0 };
 }
 
 export function createNewGame(grid: Grid, stations: readonly StationDef[]): GameState {
@@ -208,6 +212,7 @@ export function isGameState(value: unknown): value is GameState {
       (l) =>
         typeof l.built === 'boolean' &&
         isProductId(l.product) &&
+        typeof l.auto === 'boolean' &&
         isCount(l.progress) &&
         isCount(l.out) &&
         (l.outItem === null || isProductId(l.outItem)),
@@ -225,7 +230,13 @@ export function isGameState(value: unknown): value is GameState {
     Object.values(value.buildPaid).every(isCount) &&
     isMapOf(
       value.processors,
-      (m) => isCount(m.hopper) && isCount(m.progress) && isCount(m.shredded) && isItemCounts(m.tray) && isItemCounts(m.carry, true),
+      (m) =>
+        typeof m.built === 'boolean' &&
+        isCount(m.hopper) &&
+        isCount(m.progress) &&
+        isCount(m.shredded) &&
+        isItemCounts(m.tray) &&
+        isItemCounts(m.carry, true),
     )
   );
 }
@@ -255,7 +266,8 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
         break;
       }
       case 'processor':
-        processors[s.id] = state.processors[s.id] ?? newProcessorState();
+        processors[s.id] = state.processors[s.id] ?? newProcessorState(!s.build);
+        if (s.build) buildPaid[s.id] = state.buildPaid[s.id] ?? 0;
         break;
       case 'bin':
         // Upgrades can raise capacity, so only drop negative or broken counts here.
@@ -271,7 +283,7 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
         break;
       case 'factory':
         for (const line of s.lines) {
-          lines[line.id] = state.lines[line.id] ?? { built: false, product: 'sheet', progress: 0, out: 0, outItem: null };
+          lines[line.id] = state.lines[line.id] ?? { built: false, product: 'sheet', auto: true, progress: 0, out: 0, outItem: null };
           buildPaid[line.id] = state.buildPaid[line.id] ?? 0;
         }
         break;

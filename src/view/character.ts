@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { ItemId } from '../data/items';
 import { PLAYER } from '../data/player';
 import type { ModelKey, Models } from './assets';
-import { ITEM_COLORS, ITEM_HEIGHT, itemGeometry, mat } from './props';
+import { ITEM_HEIGHT, itemGeometry, itemMaterial } from './props';
 
 /** Characters are scaled up from Kenney's size so they read at our camera distance. */
 const SCALE = 1.7;
@@ -140,7 +140,7 @@ export class Character {
   private stackMesh(item: ItemId): THREE.InstancedMesh {
     let mesh = this.stackMeshes.get(item);
     if (!mesh) {
-      mesh = new THREE.InstancedMesh(itemGeometry(item), mat(ITEM_COLORS[item]), MAX_SHOWN);
+      mesh = new THREE.InstancedMesh(itemGeometry(item), itemMaterial(item), MAX_SHOWN);
       mesh.castShadow = true;
       mesh.frustumCulled = false;
       mesh.count = 0;

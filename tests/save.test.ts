@@ -101,7 +101,9 @@ describe('real save migrations', () => {
     const state = sanitizeState(loaded!.state, grid, STATIONS);
     expect(state.tick).toBe(900);
     expect(state.player.stack).toEqual([]);
-    expect(Object.keys(state.processors)).toEqual(['shredder']);
+    expect(Object.keys(state.processors)).toEqual(['shredder', 'shredder-2']);
+    expect(state.processors.shredder!.built).toBe(true);
+    expect(state.processors['shredder-2']!.built).toBe(false);
     expect(isGameState(state)).toBe(true);
   });
 });

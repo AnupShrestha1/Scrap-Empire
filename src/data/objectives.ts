@@ -56,7 +56,7 @@ export const OBJECTIVES: readonly ObjectiveDef[] = [
     id: 'shred20',
     target: 20,
     reward: 40,
-    counts: (e) => +(e.type === 'processed' && e.station === 'shredder'),
+    counts: (e) => +(e.type === 'processed' && e.station.startsWith('shredder')),
     hint: { station: 'shredder', zone: 'input' },
   },
   { id: 'buyMagnet', target: 1, reward: 40, done: (s) => s.upgrades.magnet > 0, hint: { station: 'pad-magnet', zone: 'buy' } },
@@ -99,7 +99,7 @@ export const OBJECTIVES: readonly ObjectiveDef[] = [
 /** After the chain: goals that cycle through these, each round bigger and better paid. */
 const GOALS: readonly { id: string; target: number; counts: (e: SimEvent) => number }[] = [
   { id: 'goalOrders', target: 4, counts: (e) => +(e.type === 'orderFilled') },
-  { id: 'goalShred', target: 150, counts: (e) => +(e.type === 'processed' && e.station === 'shredder') },
+  { id: 'goalShred', target: 150, counts: (e) => +(e.type === 'processed' && e.station.startsWith('shredder')) },
   { id: 'goalProducts', target: 40, counts: (e) => +(e.type === 'processed' && e.station.startsWith('line-')) },
   { id: 'goalRare', target: 6, counts: (e) => +(e.type === 'found' && e.item !== 'aluminium' && e.item !== 'copper') },
 ];

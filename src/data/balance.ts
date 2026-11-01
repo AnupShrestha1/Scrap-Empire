@@ -102,10 +102,10 @@ export const STAFF = {
   costs: [0, 500, 1000, 1800, 3000, 4500] as readonly number[],
   /** The hut opens at this business level. */
   requiresLevel: 2,
-  /** Walking speed in tiles per second (a little slower than the player). */
-  speed: 3.6,
-  /** Items an employee carries. */
-  capacity: 5,
+  /** Walking speed in tiles per second before Staff speed upgrades (the player walks 4.5). */
+  speed: 2,
+  /** Items an employee carries before Staff carry upgrades. */
+  capacity: 2,
   /** How often an employee with nothing to do looks again. */
   thinkEveryTicks: 10,
 };

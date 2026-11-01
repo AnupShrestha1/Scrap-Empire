@@ -9,6 +9,9 @@ export const UPGRADE_IDS = [
   'shredderYield',
   'extraction',
   'lineSpeed',
+  'staffSpeed',
+  'staffCarry',
+  'shredderCapacity',
 ] as const;
 export type UpgradeId = (typeof UPGRADE_IDS)[number];
 
@@ -37,6 +40,11 @@ export const UPGRADES: Readonly<Record<UpgradeId, UpgradeDef>> = {
   // Levels 1, 3, 5 and 7 unlock copper, titanium, gold and platinum (balance.ts METAL_FINDS).
   extraction: { cost: 600, growth: 1.75, maxLevel: 8, levelGates: [3, 4, 5, 5, 6, 6, 7, 7] },
   lineSpeed: { cost: 400, growth: 1.55, maxLevel: 8, requiresLine: 'line-1' },
+  // Employees start slow with small hands; these make them worth more than an extra player only over time.
+  staffSpeed: { cost: 300, growth: 1.6, maxLevel: 6, requiresLevel: 2 },
+  staffCarry: { cost: 300, growth: 1.6, maxLevel: 6, requiresLevel: 2 },
+  // A bigger hopper and output tray, so the player doesn't have to drop scrap while the shredder catches up.
+  shredderCapacity: { cost: 120, growth: 1.6, maxLevel: 6 },
 };
 
 /** What each level does. */
@@ -55,15 +63,22 @@ export const UPGRADE_EFFECTS = {
   yieldPerLevel: 0.1,
   /** Line batch time is multiplied by this per speed level. */
   lineCycleFactor: 0.85,
+  /** Employee walking speed (tiles/s) and items carried added per level. */
+  staffSpeedPerLevel: 0.35,
+  staffCarryPerLevel: 1,
+  /** Shredder hopper and output tray space added per Shredder capacity level. */
+  hopperPerLevel: 5,
+  trayPerLevel: 6,
 } as const;
 
 /** How cash pads take payment. */
 export const PURCHASE = {
   /**
    * Standing still this long on a sell, upgrade or build pad before anything happens, so walking across
-   * one costs nothing (the user asked for 2 s). A ring above the worker fills while waiting.
+   * one costs nothing (the user asked for 1 s, counted only while standing still). A ring above the
+   * worker fills while waiting.
    */
-  delayS: 2,
+  delayS: 1,
   /** The drop-off pad only gives scrap back to the field, so it waits just long enough to skip walk-overs. */
   returnDelayS: 0.4,
   /** A level is paid off in about this long, whatever it costs. */
@@ -93,5 +108,8 @@ export function emptyUpgradeCounts(): Record<UpgradeId, number> {
     shredderYield: 0,
     extraction: 0,
     lineSpeed: 0,
+    staffSpeed: 0,
+    staffCarry: 0,
+    shredderCapacity: 0,
   };
 }

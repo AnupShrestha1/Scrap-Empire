@@ -1,5 +1,5 @@
 // Values after upgrades. Systems and views read these instead of the raw balance numbers.
-import { businessLevel, CARRY, FIELD, METAL_FINDS, SHREDDER, SUPPLIER } from '../data/balance';
+import { businessLevel, CARRY, FIELD, METAL_FINDS, SHREDDER, STAFF, SUPPLIER } from '../data/balance';
 import { METALS, type MetalId, type ProductId } from '../data/items';
 import { RECIPES, recipeMetals } from '../data/recipes';
 import { UPGRADE_EFFECTS as FX } from '../data/upgrades';
@@ -12,6 +12,26 @@ export function carryCapacity(state: GameState): number {
 
 export function magnetRadius(state: GameState): number {
   return FIELD.magnetRadius + FX.magnetPerLevel * state.upgrades.magnet;
+}
+
+/** How fast employees walk, in tiles per second. */
+export function staffSpeed(state: GameState): number {
+  return STAFF.speed + FX.staffSpeedPerLevel * state.upgrades.staffSpeed;
+}
+
+/** How many items each employee carries. */
+export function staffCapacity(state: GameState): number {
+  return STAFF.capacity + FX.staffCarryPerLevel * state.upgrades.staffCarry;
+}
+
+/** A processor's hopper space after Shredder capacity upgrades. */
+export function hopperCapacity(def: ProcessorDef, state: GameState): number {
+  return def.recipe.hopper + FX.hopperPerLevel * state.upgrades.shredderCapacity;
+}
+
+/** A processor's output tray space after Shredder capacity upgrades. */
+export function trayCapacity(def: ProcessorDef, state: GameState): number {
+  return def.recipe.tray + FX.trayPerLevel * state.upgrades.shredderCapacity;
 }
 
 export function binCapacity(def: BinDef, state: GameState): number {

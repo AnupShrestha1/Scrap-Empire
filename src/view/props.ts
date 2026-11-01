@@ -70,7 +70,22 @@ function mesh(geo: THREE.BufferGeometry, color: number): THREE.Mesh {
 
 // ---------------------------------------------------------------------------------------------- items
 
-const bar = (long: number) => new THREE.BoxGeometry(long, 0.14, 0.24);
+/**
+ * A cast ingot: a bar with sloped sides, narrower on top than at its base, so it reads as metal from any
+ * angle. Rarer metals come in smaller bars.
+ */
+function bar(long: number): THREE.BufferGeometry {
+  const geo = new THREE.BoxGeometry(long, 0.15, 0.24);
+  const pos = geo.attributes.position!;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) > 0) {
+      pos.setX(i, pos.getX(i) * 0.78);
+      pos.setZ(i, pos.getZ(i) * 0.62);
+    }
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
 const lying = (geo: THREE.BufferGeometry) => geo.rotateZ(Math.PI / 2);
 
 /** Every item's shape: metals as bars (rarer ones smaller), products each recognisable at a glance. */
@@ -110,8 +125,43 @@ export function itemGeometry(item: ItemId): THREE.BufferGeometry {
   return ITEM_GEOMETRY[item];
 }
 
+/** How shiny each metal is: rarer metals gleam more. Everything else is matte. */
+const METAL_FINISH: Partial<Record<ItemId, { metalness: number; roughness: number; glow?: number }>> = {
+  iron: { metalness: 0.45, roughness: 0.5 },
+  aluminium: { metalness: 0.55, roughness: 0.32 },
+  copper: { metalness: 0.6, roughness: 0.3 },
+  titanium: { metalness: 0.6, roughness: 0.3 },
+  gold: { metalness: 0.75, roughness: 0.22, glow: 0.12 },
+  platinum: { metalness: 0.75, roughness: 0.18, glow: 0.1 },
+};
+
+const itemMaterials = new Map<ItemId, THREE.Material>();
+
+/** One shared material per item: shiny for metals (they reflect the scene's environment light), matte otherwise. */
+export function itemMaterial(item: ItemId): THREE.Material {
+  let m = itemMaterials.get(item);
+  if (!m) {
+    const finish = METAL_FINISH[item];
+    m = finish
+      ? new THREE.MeshStandardMaterial({
+          color: ITEM_COLORS[item],
+          metalness: finish.metalness,
+          roughness: finish.roughness,
+          emissive: ITEM_COLORS[item],
+          emissiveIntensity: finish.glow ?? 0,
+          flatShading: true,
+        })
+      : mat(ITEM_COLORS[item]);
+    itemMaterials.set(item, m);
+  }
+  return m;
+}
+
 export function itemMesh(item: ItemId): THREE.Mesh {
-  return mesh(ITEM_GEOMETRY[item], ITEM_COLORS[item]);
+  const m = new THREE.Mesh(ITEM_GEOMETRY[item], itemMaterial(item));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
 }
 
 // ---------------------------------------------------------------------------------------------- scenery
@@ -212,7 +262,7 @@ export class BinProp {
     this.rim = mesh(mergeGeometries(rims)!, ITEM_COLORS[item]);
     this.rimColor = ITEM_COLORS[item];
     this.root.add(mesh(mergeGeometries(walls)!, COLORS.binWall), this.rim);
-    this.bars = new THREE.InstancedMesh(ITEM_GEOMETRY[item], mat(ITEM_COLORS[item]), slots);
+    this.bars = new THREE.InstancedMesh(ITEM_GEOMETRY[item], itemMaterial(item), slots);
     this.bars.castShadow = true;
     this.bars.receiveShadow = true;
     this.root.add(this.bars);
@@ -254,7 +304,7 @@ export class PileProp {
   constructor(items: readonly ItemId[], private readonly perItem = 12) {
     this.root.add(mesh(new THREE.BoxGeometry(0.9, 0.12, 0.9).translate(0, 0.06, 0), 0xb08050));
     items.forEach((item) => {
-      const im = new THREE.InstancedMesh(ITEM_GEOMETRY[item], mat(ITEM_COLORS[item]), perItem);
+      const im = new THREE.InstancedMesh(ITEM_GEOMETRY[item], itemMaterial(item), perItem);
       im.castShadow = true;
       im.count = 0;
       this.meshes.set(item, im);

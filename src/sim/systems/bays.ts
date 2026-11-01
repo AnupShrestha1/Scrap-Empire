@@ -1,20 +1,41 @@
 import { businessLevel, ORDERS, PRICES } from '../../data/balance';
-import type { ItemId } from '../../data/items';
+import { isProduct, PRODUCTS, type ItemId } from '../../data/items';
+import { RECIPES, recipeMetals } from '../../data/recipes';
+import { productUnlocked } from '../effective';
 import type { SimEvent } from '../events';
 import { secondsToTicks, type BayState, type GameState } from '../state';
 import type { BayDef, FactoryDef } from '../stations';
 import { nextRandom } from './field';
 
-/** What the factory's built lines are set to make: what buyer trucks may order. */
+/**
+ * What buyer trucks may order: any product the player can make now (its metals unlocked), once a line is
+ * built. Products another truck is already waiting for are left out while there are others to pick.
+ */
 export function orderableItems(factories: readonly FactoryDef[], state: GameState): ItemId[] {
-  const items = new Set<ItemId>();
-  for (const f of factories) {
-    for (const line of f.lines) {
-      const st = state.lines[line.id];
-      if (st?.built) items.add(st.product);
-    }
+  const anyLine = factories.some((f) => f.lines.some((l) => state.lines[l.id]?.built));
+  if (!anyLine) return [];
+  const all = PRODUCTS.filter((p) => productUnlocked(p, state));
+  const ordered = new Set(Object.values(state.bays).filter((b) => b.phase !== 'empty' && b.item).map((b) => b.item));
+  const fresh = all.filter((p) => !ordered.has(p));
+  return fresh.length > 0 ? fresh : all;
+}
+
+/**
+ * Picks a product for a new order: random, but weighted towards what the factory can deliver soon:
+ * products a line is making count three times, ones whose metals are all in the bins twice.
+ */
+function pickOrder(items: readonly ItemId[], factories: readonly FactoryDef[], state: GameState): ItemId {
+  const making = new Set<ItemId>();
+  for (const f of factories) for (const l of f.lines) if (state.lines[l.id]?.built) making.add(state.lines[l.id]!.product);
+  const stocked = (item: ItemId) =>
+    isProduct(item) && recipeMetals(item).every((m) => Object.entries(state.bins).some(([id, b]) => id === `bin-${m}` && b.count >= RECIPES[item].inputs[m]!));
+  const weights = items.map((item) => (making.has(item) ? 3 : stocked(item) ? 2 : 1));
+  let r = nextRandom(state.field) * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < items.length; i++) {
+    r -= weights[i]!;
+    if (r < 0) return items[i]!;
   }
-  return [...items];
+  return items[items.length - 1]!;
 }
 
 /** The first product made in a game, if one is waiting on a line: the first truck comes for it at once. */
@@ -60,7 +81,7 @@ export function stepBay(def: BayDef, bay: BayState, state: GameState, factories:
       if (--bay.timer > 0) return false;
       bay.phase = 'arriving';
       bay.timer = secondsToTicks(ORDERS.driveInS);
-      bay.item = items[Math.floor(nextRandom(state.field) * items.length)]!;
+      bay.item = pickOrder(items, factories, state);
       bay.want = ORDERS.minAmount + Math.floor(nextRandom(state.field) * (ORDERS.maxAmount - ORDERS.minAmount + 1));
       bay.have = 0;
       return true;

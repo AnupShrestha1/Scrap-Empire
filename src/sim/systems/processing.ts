@@ -32,6 +32,8 @@ export function stepProcessor(
   events: SimEvent[],
   finds: Finds,
   roll: () => number,
+  /** Output tray space (the recipe's, raised by upgrades). */
+  trayCapacity = def.recipe.tray,
 ): boolean {
   if (state.progress === 0) {
     if (state.hopper === 0) return false;
@@ -45,7 +47,7 @@ export function stepProcessor(
   // Finished. Wait until the tray has room for the most this input could give.
   const iron = Math.floor(state.carry.iron + finds.iron + 1e-9);
   const rare = METALS.filter((m) => (finds.chances[m] ?? 0) > 0);
-  if (trayTotal(state) + iron + rare.length > def.recipe.tray) return false;
+  if (trayTotal(state) + iron + rare.length > trayCapacity) return false;
 
   state.tray.iron += iron;
   state.carry.iron = Math.max(0, state.carry.iron + finds.iron - iron);

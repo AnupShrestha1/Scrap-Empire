@@ -6,6 +6,9 @@
 /** Business level at which each station appears; anything not listed is there from the start. */
 export const STATION_LEVELS: Readonly<Record<string, number>> = {
   'staff-hut': 2,
+  'pad-staff-speed': 2,
+  'pad-shredder-capacity': 1,
+  'pad-staff-carry': 2,
   'bin-aluminium': 2,
   'pad-shredder': 2,
   'pad-bins': 2,
@@ -18,6 +21,7 @@ export const STATION_LEVELS: Readonly<Record<string, number>> = {
   'pad-extraction': 3,
   'pad-line-speed': 3,
   'bay-b': 4,
+  'shredder-2': 4,
   'bay-c': 5,
   'bay-d': 6,
   'bay-e': 7,

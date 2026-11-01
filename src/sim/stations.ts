@@ -31,7 +31,9 @@ export interface ProcessorDef extends StationBase {
   recipe: ProcessorRecipe;
   /** The upgrade that speeds this machine up. */
   speedUpgrade?: UpgradeId;
-  zones: { input: Rect; output: Rect };
+  /** A machine bought later (on its `build` zone) rather than there from the start. */
+  build?: { cost: number; requiresLevel: number };
+  zones: { input: Rect; output: Rect; build?: Rect };
 }
 
 /**
@@ -109,6 +111,7 @@ export type StationDef = DumpDef | ProcessorDef | BinDef | CashPadDef | FactoryD
 export type ZoneHit =
   | { station: DumpDef; zone: 'return' }
   | { station: ProcessorDef; zone: 'input' | 'output' }
+  | { station: ProcessorDef; zone: 'buildMachine' }
   | { station: BinDef; zone: 'deposit' }
   | { station: CashPadDef; zone: 'buy' }
   | { station: FactoryDef; zone: 'build' }
@@ -133,6 +136,7 @@ export function zoneAt(stations: readonly StationDef[], x: number, y: number): Z
         if (inRect(s.zones.return, x, y)) return { station: s, zone: 'return' };
         break;
       case 'processor':
+        if (s.zones.build && inRect(s.zones.build, x, y)) return { station: s, zone: 'buildMachine' };
         if (inRect(s.zones.input, x, y)) return { station: s, zone: 'input' };
         if (inRect(s.zones.output, x, y)) return { station: s, zone: 'output' };
         break;

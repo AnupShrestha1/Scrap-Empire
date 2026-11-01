@@ -3,14 +3,14 @@ import type { ProcessorStatus, SimEvent } from './events';
 import type { Grid } from './grid';
 import type { GameState } from './state';
 import type { ProductId } from '../data/items';
-import type { BayDef, BinDef, DumpDef, FactoryDef, LineDef, ProcessorDef, Rect, StationDef } from './stations';
+import type { BayDef, BinDef, DealerDef, DumpDef, FactoryDef, LineDef, OutletDef, ProcessorDef, Rect, StationDef } from './stations';
 import { stepBay } from './systems/bays';
 import { stepStaff, type Brain, type StaffWorld } from './systems/staff';
 import { dropStack, nextRandom, stepField } from './systems/field';
-import { setLineProduct, stepLine } from './systems/manufacturing';
+import { autoAssignLines, setLineProduct, stepLine } from './systems/manufacturing';
 import { newInteractionState, padCharge, stepInteraction, type InteractionState } from './systems/interaction';
 import { stepPlayer } from './systems/player';
-import { processorCycleTicks, shredderFinds } from './effective';
+import { processorCycleTicks, shredderFinds, trayCapacity } from './effective';
 import { businessLevel, PRICES } from '../data/balance';
 import { levelChest } from '../data/unlocks';
 import { stepObjectives } from './systems/objectives';
@@ -74,10 +74,12 @@ export class Simulation {
     this.staffWorld = {
       grid,
       dump,
-      shredder: this.processorDefs[0]!,
+      shredders: this.processorDefs,
       bins: [...this.binDefs.values()],
       factories: this.factories,
       bays: this.bayDefs,
+      dealer: stations.find((s): s is DealerDef => s.kind === 'dealer'),
+      outlet: stations.find((s): s is OutletDef => s.kind === 'outlet'),
     };
     for (const def of this.processorDefs) {
       this.statuses.set(def.id, processorStatus(def, state.processors[def.id]!, processorCycleTicks(def, state)));
@@ -133,15 +135,26 @@ export class Simulation {
     return this.interaction.zoneKey;
   }
 
-  /** Sets what a factory line makes (from the recipe card). Returns true if it changed. */
+  /** Sets what a factory line makes (from the recipe card); this turns the line's Auto off. */
   setLineProduct(lineId: string, product: ProductId): boolean {
+    const st = this.state.lines[lineId];
+    if (!st) return false;
     for (const factory of this.factories) {
-      if (setLineProduct(factory, lineId, product, this.binDefs, this.state)) {
+      if (factory.lines.some((l) => l.id === lineId) && (st.product === product || setLineProduct(factory, lineId, product, this.binDefs, this.state))) {
+        st.auto = false;
         this.dirty = true;
         return true;
       }
     }
     return false;
+  }
+
+  /** Turns a line's Auto (follow the trucks) on or off. */
+  setLineAuto(lineId: string, auto: boolean): void {
+    const st = this.state.lines[lineId];
+    if (!st || st.auto === auto) return;
+    st.auto = auto;
+    this.dirty = true;
   }
 
   /**
@@ -199,12 +212,14 @@ export class Simulation {
       changed = dropStack(state, this.grid, events) || changed;
     }
     changed = stepField(state, this.dump, TICK_MS / 1000, events) || changed;
-    changed = stepInteraction(state, this.stations, this.interaction, events) || changed;
+    const moved = p.x !== this.prevPlayer.x || p.y !== this.prevPlayer.y;
+    changed = stepInteraction(state, this.stations, this.interaction, events, moved) || changed;
     changed = stepSupplier(state, this.dump, events) || changed;
     for (const def of this.processorDefs) {
       const machine = state.processors[def.id]!;
+      if (!machine.built) continue;
       const cycle = processorCycleTicks(def, state, machine);
-      changed = stepProcessor(def, machine, cycle, events, shredderFinds(state), this.roll) || changed;
+      changed = stepProcessor(def, machine, cycle, events, shredderFinds(state), this.roll, trayCapacity(def, state)) || changed;
       const status = processorStatus(def, machine, cycle);
       if (status !== this.statuses.get(def.id)) {
         this.statuses.set(def.id, status);
@@ -212,6 +227,7 @@ export class Simulation {
       }
     }
     for (const factory of this.factories) {
+      changed = autoAssignLines(factory, this.binDefs, state) || changed;
       for (const line of factory.lines) {
         changed = stepLine(factory, line, state.lines[line.id]!, this.binDefs, state, events) || changed;
       }

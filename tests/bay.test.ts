@@ -36,6 +36,8 @@ function waitingTruck(): GameState {
   state.lines['line-1']!.built = true;
   state.firstOrder = true;
   runBay(state, secondsToTicks(ORDERS.driveInS + 2));
+  // Orders are random; pin this one to sheets so the tests below can fill it.
+  state.bays[bayA.id]!.item = 'sheet';
   return state;
 }
 
@@ -60,12 +62,22 @@ describe('the loading bay', () => {
     expect(state.firstOrder).toBe(true);
   });
 
-  it('gets a truck ordering something a line is set to make', () => {
-    const bay = waitingTruck().bays[bayA.id]!;
-    expect(bay.phase).toBe('waiting');
-    expect(bay.item).toBe('sheet');
-    expect(bay.want).toBeGreaterThanOrEqual(ORDERS.minAmount);
-    expect(bay.want).toBeLessThanOrEqual(ORDERS.maxAmount);
+  it('gets trucks ordering a mix of unlocked products, not just what the lines make', () => {
+    const state = createNewGame(grid, STATIONS);
+    state.earned = BUSINESS_LEVELS[2]!; // level 3: iron and aluminium products
+    state.lines['line-1']!.built = true;
+    state.firstOrder = true;
+    const seen = new Set<string>();
+    for (let n = 0; n < 40; n++) {
+      Object.assign(state.bays[bayA.id]!, { phase: 'empty', timer: 1, item: null });
+      runBay(state, 2);
+      const bay = state.bays[bayA.id]!;
+      expect(bay.phase).toBe('arriving');
+      expect(bay.want).toBeGreaterThanOrEqual(ORDERS.minAmount);
+      expect(bay.want).toBeLessThanOrEqual(ORDERS.maxAmount);
+      seen.add(bay.item!);
+    }
+    expect([...seen].sort()).toEqual(['can', 'sheet', 'toolbox']);
   });
 
   it('pays the order bonus when the truck is filled, then sends it off', () => {
@@ -138,7 +150,7 @@ describe('save v8 → v11', () => {
     const loaded = new SaveManager(store, isGameState).load();
     expect(loaded).not.toBeNull();
     const state = sanitizeState(loaded!.state, grid, STATIONS);
-    expect(state.lines['line-1']).toEqual({ built: true, product: 'sheet', progress: 0, out: 0, outItem: null });
+    expect(state.lines['line-1']).toEqual({ built: true, product: 'sheet', auto: true, progress: 0, out: 0, outItem: null });
     expect(state.lines['line-2']).toMatchObject({ built: false, product: 'can' });
     expect(state.bays['bay-a']!.phase).toBe('empty');
   });

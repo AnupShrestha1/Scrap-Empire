@@ -3,10 +3,10 @@ import { isMetal, isProduct, ITEM_IDS } from '../../data/items';
 import { PURCHASE, requiredLevel, UPGRADES, upgradeCost } from '../../data/upgrades';
 import { businessLevel } from '../../data/balance';
 import { SIM } from '../../config';
-import { binCapacity, carryCapacity } from '../effective';
+import { binCapacity, carryCapacity, hopperCapacity } from '../effective';
 import { PLAYER_PLACE, type SimEvent } from '../events';
 import { secondsToTicks, type GameState } from '../state';
-import { inRect, zoneAt, type BinDef, type CashPadDef, type FactoryDef, type StaffHutDef, type StationDef, type ZoneHit } from '../stations';
+import { inRect, zoneAt, type BinDef, type CashPadDef, type FactoryDef, type ProcessorDef, type StaffHutDef, type StationDef, type ZoneHit } from '../stations';
 import { nextUnbuiltLine } from './manufacturing';
 import { loadOrder } from './bays';
 import { randomKind, scatterPiece } from './field';
@@ -54,6 +54,8 @@ export function stepInteraction(
   stations: readonly StationDef[],
   inter: InteractionState,
   events: SimEvent[],
+  /** Whether the player moved this tick; moving restarts the stand-still timer. */
+  moved = false,
 ): boolean {
   const p = state.player;
   const hit = zoneAt(stations, p.x, p.y);
@@ -67,11 +69,13 @@ export function stepInteraction(
   } else if (hit) {
     const rate = hit.zone === 'sell' ? SELL_PER_S : CARRY.transferPerS;
     inter.budget = Math.min(1, inter.budget + rate / SIM.tickRate);
-    inter.dwell++;
+    // The stand-still timer only runs while the player is actually standing still.
+    inter.dwell = moved ? 0 : inter.dwell + 1;
   }
   if (!hit) return false;
   if (hit.zone === 'buy') return stepPurchase(state, hit.station, inter, events);
   if (hit.zone === 'build') return stepBuild(state, hit.station, inter, events);
+  if (hit.zone === 'buildMachine') return stepBuildMachine(state, hit.station, inter, events);
   if (hit.zone === 'hire') return stepHire(state, hit.station, inter, events);
   if (hit.zone === 'recipes' || hit.zone === 'stock') {
     // Opens a card once per visit (choosing products, or what to sell from storage); the choice comes
@@ -161,6 +165,22 @@ function stepHire(state: GameState, hut: StaffHutDef, inter: InteractionState, e
   return true;
 }
 
+/** Pays for a machine bought later (the second shredder) on its build pad. */
+function stepBuildMachine(state: GameState, def: ProcessorDef, inter: InteractionState, events: SimEvent[]): boolean {
+  const machine = state.processors[def.id]!;
+  if (machine.built || !def.build) return false;
+  if (businessLevel(state.earned) < def.build.requiresLevel) return warnLocked(inter, events, { level: def.build.requiresLevel });
+  const pay = takePayment(state, inter, events, def.build.cost, state.buildPaid[def.id] ?? 0);
+  if (pay === 0) return false;
+  state.buildPaid[def.id] = (state.buildPaid[def.id] ?? 0) + pay;
+  if (state.buildPaid[def.id]! >= def.build.cost) {
+    machine.built = true;
+    state.buildPaid[def.id] = 0;
+    events.push({ type: 'built', station: def.id });
+  }
+  return true;
+}
+
 /** Pays for the factory's next production line. */
 function stepBuild(state: GameState, factory: FactoryDef, inter: InteractionState, events: SimEvent[]): boolean {
   const line = nextUnbuiltLine(factory, state);
@@ -184,7 +204,7 @@ function stepBuild(state: GameState, factory: FactoryDef, inter: InteractionStat
 function transferOne(
   state: GameState,
   stations: readonly StationDef[],
-  hit: Exclude<ZoneHit, { zone: 'buy' | 'build' | 'hire' | 'recipes' | 'stock' }>,
+  hit: Exclude<ZoneHit, { zone: 'buy' | 'build' | 'buildMachine' | 'hire' | 'recipes' | 'stock' }>,
   inter: InteractionState,
   events: SimEvent[],
 ): boolean {
@@ -206,9 +226,10 @@ function transferOne(
 
     case 'input': {
       const machine = state.processors[id]!;
+      if (!machine.built) return false;
       const recipe = hit.station.recipe;
       const index = stack.lastIndexOf(recipe.input);
-      if (index < 0 || machine.hopper >= recipe.hopper) return false;
+      if (index < 0 || machine.hopper >= hopperCapacity(hit.station, state)) return false;
       stack.splice(index, 1);
       machine.hopper++;
       events.push({ type: 'itemMoved', item: recipe.input, from: PLAYER_PLACE, to: id });
@@ -217,6 +238,7 @@ function transferOne(
 
     case 'output': {
       const machine = state.processors[id]!;
+      if (!machine.built) return false;
       if (!room) return false;
       const item = ITEM_IDS.find((i) => machine.tray[i] > 0);
       if (!item) return false;

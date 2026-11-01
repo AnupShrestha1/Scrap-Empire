@@ -1,7 +1,7 @@
 import { ITEM_IDS } from '../data/items';
 
 /** Current save format. Bump it, and add a migration, whenever GameState changes shape. */
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 13;
 
 export type Migration = (state: unknown) => unknown;
 
@@ -132,6 +132,31 @@ export const MIGRATIONS: Migrations = {
       upgradePaid,
       objectives,
       firstOrder: lines['line-1'].built || lines['line-2'].built,
+    };
+  },
+  /** v11 → v12: Staff speed and Staff carry upgrades. */
+  11: (state) => {
+    const s = state as Json;
+    const zero = { staffSpeed: 0, staffCarry: 0 };
+    return { ...s, upgrades: { ...zero, ...(s.upgrades as Json) }, upgradePaid: { ...zero, ...(s.upgradePaid as Json) } };
+  },
+  /**
+   * v12 → v13: the Shredder capacity upgrade; machines can be bought later, so existing ones are marked
+   * built; lines get Auto (follow the trucks' orders), on.
+   */
+  12: (state) => {
+    const s = state as Json;
+    const zero = { shredderCapacity: 0 };
+    const processors: Json = {};
+    for (const [id, p] of Object.entries((s.processors as Json) ?? {})) processors[id] = { built: true, ...(p as Json) };
+    const lines: Json = {};
+    for (const [id, l] of Object.entries((s.lines as Json) ?? {})) lines[id] = { auto: true, ...(l as Json) };
+    return {
+      ...s,
+      processors,
+      lines,
+      upgrades: { ...zero, ...(s.upgrades as Json) },
+      upgradePaid: { ...zero, ...(s.upgradePaid as Json) },
     };
   },
 };

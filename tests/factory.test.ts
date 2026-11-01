@@ -10,7 +10,7 @@ import { Simulation } from '../src/sim/simulation';
 import { createNewGame, secondsToTicks, type GameState } from '../src/sim/state';
 import { inRect, type BinDef, type FactoryDef, type Rect } from '../src/sim/stations';
 import { newInteractionState, stepInteraction } from '../src/sim/systems/interaction';
-import { batchTicks, lineStatus, nextUnbuiltLine, setLineProduct, stepLine } from '../src/sim/systems/manufacturing';
+import { autoAssignLines, batchTicks, lineStatus, nextUnbuiltLine, setLineProduct, stepLine } from '../src/sim/systems/manufacturing';
 
 const grid = parseGrid(YARD, STATIONS);
 const factory = STATIONS.find((s): s is FactoryDef => s.kind === 'factory')!;
@@ -196,5 +196,49 @@ describe('pad placement', () => {
         for (const pad of pads) expect(inRect(pad.r, x, y), `${pad.id} on route ${i}`).toBe(false);
       }
     }
+  });
+});
+
+describe('the second shredder', () => {
+  it('is bought on its pad at business level 4, then shreds', () => {
+    const state = createNewGame(grid, STATIONS);
+    const def = STATIONS.find((s) => s.id === 'shredder-2')!;
+    const pad = (def as { zones: { build: Rect } }).zones.build;
+    state.money = 10_000;
+    standAt(state, pad.x, pad.y, 100);
+    expect(state.processors['shredder-2']!.built).toBe(false);
+    state.earned = 1e6;
+    standAt(state, pad.x, pad.y, 200, [], () => state.processors['shredder-2']!.built);
+    expect(state.processors['shredder-2']!.built).toBe(true);
+    expect(state.money).toBe(10_000 - 2500);
+  });
+});
+
+describe('Auto lines', () => {
+  function withTruck(item: 'toolbox' | 'can') {
+    const state = createNewGame(grid, STATIONS);
+    state.earned = 1e6;
+    state.lines['line-1']!.built = true;
+    Object.assign(state.bays['bay-a']!, { phase: 'waiting', timer: 2000, item, want: 5, have: 0 });
+    return state;
+  }
+
+  it('switch to what a waiting truck needs once there are employees', () => {
+    const state = withTruck('toolbox');
+    autoAssignLines(factory, binDefs, state);
+    expect(state.lines['line-1']!.product).toBe('sheet');
+    state.employees.push({ id: 0, x: 10.5, y: 12.5, facing: 'down', stack: [] });
+    autoAssignLines(factory, binDefs, state);
+    expect(state.lines['line-1']!.product).toBe('toolbox');
+  });
+
+  it('leave a line alone once the player picks its product by hand', () => {
+    const state = withTruck('can');
+    state.employees.push({ id: 0, x: 10.5, y: 12.5, facing: 'down', stack: [] });
+    const sim = new Simulation(state, grid, STATIONS, 'dump');
+    sim.setLineProduct('line-1', 'sheet');
+    expect(state.lines['line-1']!.auto).toBe(false);
+    autoAssignLines(factory, binDefs, state);
+    expect(state.lines['line-1']!.product).toBe('sheet');
   });
 });

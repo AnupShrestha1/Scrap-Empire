@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { VIEW } from '../config';
 import type { GameContext } from '../context';
 import { itemName, t, upgradeName } from '../i18n';
@@ -120,10 +121,15 @@ export class World {
   }
 
   private setUpLights(mobile: boolean): void {
+    // A soft studio environment: shiny metals reflect it; matte things just pick up a little fill.
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.45;
+    pmrem.dispose();
     const sky = 0xbfe3ff;
     this.scene.background = new THREE.Color(sky);
     this.scene.fog = new THREE.Fog(sky, 35, 70);
-    this.scene.add(new THREE.HemisphereLight(0xdff0ff, 0x7a6a50, 1.5));
+    this.scene.add(new THREE.HemisphereLight(0xdff0ff, 0x7a6a50, 1.25));
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.setScalar(mobile ? 1024 : 2048);
     const sc = this.sun.shadow.camera;
@@ -371,6 +377,7 @@ export class World {
       case 'built': {
         const line = sim.factoryLine(event.station);
         if (line) toasts.show(t('toast.built', { name: lineName(sim, line.id) }), 'good');
+        else toasts.show(t('toast.built', { name: t('shredder.build') }), 'good');
         sfx.play('upgrade');
         break;
       }

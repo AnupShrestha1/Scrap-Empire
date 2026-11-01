@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import type { ItemId } from '../data/items';
-import { ITEM_COLORS, itemGeometry } from './props';
+import { itemGeometry, itemMaterial } from './props';
 
 interface Puff {
   at: THREE.Vector3;
@@ -88,7 +88,7 @@ export class Flyers {
 
   constructor(items: readonly ItemId[], private readonly max = 48) {
     for (const item of items) {
-      const mesh = new THREE.InstancedMesh(itemGeometry(item), new THREE.MeshStandardMaterial({ color: ITEM_COLORS[item], roughness: 0.85, flatShading: true }), max);
+      const mesh = new THREE.InstancedMesh(itemGeometry(item), itemMaterial(item), max);
       mesh.count = 0;
       mesh.castShadow = true;
       mesh.frustumCulled = false;

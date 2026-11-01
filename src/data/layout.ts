@@ -81,6 +81,16 @@ export const STATIONS: readonly StationDef[] = [
     speedUpgrade: 'shredderSpeed',
     zones: { input: { x: 21, y: 13, w: 2, h: 1 }, output: { x: 23, y: 11, w: 1, h: 2 } },
   },
+  // A second shredder, bought later on the pad beside its plot (south of the first, off the routes).
+  {
+    id: 'shredder-2',
+    kind: 'processor',
+    rect: { x: 21, y: 15, w: 2, h: 2 },
+    recipe: SHREDDER,
+    speedUpgrade: 'shredderSpeed',
+    build: { cost: 2500, requiresLevel: 4 },
+    zones: { input: { x: 21, y: 17, w: 2, h: 1 }, output: { x: 23, y: 15, w: 1, h: 2 }, build: { x: 24, y: 18, w: 1, h: 1 } },
+  },
   // Storage: one bin per metal in a 2 × 3 block, common metals on the left. Carry metal into the gaps
   // beside a bin and it goes in; the walkways between rows are free. Metal is sold at the Scrap Dealer.
   bin('bin-iron', 'iron', 27, 8),
@@ -107,18 +117,23 @@ export const STATIONS: readonly StationDef[] = [
     lines: LINE_SLOTS.map((slot, i) => ({ id: `line-${i + 1}`, ...slot, output: { x: 38, y: 8 + i * 2, w: 1, h: 1 } })),
     // The build pad (buy the next line) in front; the recipe pad (choose what each line makes) behind,
     // a dead end beside the line speed pad.
-    zones: { build: { x: 36, y: 16, w: 2, h: 1 }, recipes: { x: 37, y: 6, w: 1, h: 1 } },
+    zones: { build: { x: 36, y: 16, w: 2, h: 1 }, recipes: { x: 35, y: 18, w: 1, h: 1 } },
   },
   // Upgrade pads, each near what it improves and off the walking routes.
   cashPad('pad-supply', 'supply', 7, 23),
   cashPad('pad-carry', 'carry', 10, 23),
   cashPad('pad-magnet', 'magnet', 13, 23),
-  cashPad('pad-shredder', 'shredderSpeed', 21, 9),
-  cashPad('pad-yield', 'shredderYield', 23, 9),
-  cashPad('pad-extraction', 'extraction', 25, 9),
+  // Staff upgrades beside the hut's hire pad.
+  cashPad('pad-staff-speed', 'staffSpeed', 20, 23),
+  cashPad('pad-staff-carry', 'staffCarry', 23, 23),
+  // Shredder upgrades in a row well north of it: any closer and the machine hides them from the camera.
+  cashPad('pad-shredder-capacity', 'shredderCapacity', 19, 6),
+  cashPad('pad-shredder', 'shredderSpeed', 22, 6),
+  cashPad('pad-yield', 'shredderYield', 25, 6),
+  cashPad('pad-extraction', 'extraction', 28, 6),
   cashPad('pad-bins', 'binSize', 32, 20),
-  // Line speed behind the factory, a dead end.
-  cashPad('pad-line-speed', 'lineSpeed', 35, 6),
+  // Line speed in front of the factory, beside the recipe pad (both off the routes, and in the camera's view).
+  cashPad('pad-line-speed', 'lineSpeed', 38, 18),
   // The loading bay: buyer trucks back in along two lanes from the east gate. Load them from the zone at
   // their tail. Six lanes, two rows apart, open one per business level from 3 to 8 (unlocks.ts). Products
   // can also be sold outright at the stall (outlet), a dead end south of the lanes.

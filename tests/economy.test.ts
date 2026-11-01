@@ -226,7 +226,7 @@ describe('save v10 → v11', () => {
     const loaded = new SaveManager(store, isGameState).load();
     expect(loaded).not.toBeNull();
     const state = sanitizeState(loaded!.state, grid, STATIONS);
-    expect(state.lines['line-1']).toEqual({ built: true, product: 'sheet', progress: 0, out: 3, outItem: 'sheet' });
+    expect(state.lines['line-1']).toEqual({ built: true, product: 'sheet', auto: true, progress: 0, out: 3, outItem: 'sheet' });
     expect(state.lines['line-2']).toMatchObject({ built: true, product: 'can' });
     expect(state.upgrades.lineSpeed).toBe(4);
     expect(state.processors.shredder!.tray).toMatchObject({ iron: 2, aluminium: 1, gold: 0, motor: 0 });

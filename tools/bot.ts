@@ -49,7 +49,7 @@ const centre = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 
 /** Order the bot buys upgrades in when it can afford several: what moves the economy most first. */
 const UPGRADE_PRIORITY: readonly UpgradeId[] = [
-  'carry', 'magnet', 'shredderSpeed', 'supply', 'extraction', 'binSize', 'lineSpeed', 'shredderYield',
+  'carry', 'magnet', 'shredderSpeed', 'staffCarry', 'supply', 'staffSpeed', 'extraction', 'binSize', 'lineSpeed', 'shredderYield',
 ];
 
 export function runBot(minutes: number): TimelineEntry[] {
@@ -139,8 +139,9 @@ export function runBot(minutes: number): TimelineEntry[] {
     return used;
   };
 
-  /** Sets each built line to the best unlocked product in its plan. */
+  /** Sets each built line to the best unlocked product in its plan, until employees run the lines on Auto. */
   const planLines = () => {
+    if (s.employees.length > 0) return;
     factory.lines.forEach((l, i) => {
       if (!s.lines[l.id]!.built) return;
       const want = LINE_PLANS[i]!.find((p) => productUnlocked(p, s));

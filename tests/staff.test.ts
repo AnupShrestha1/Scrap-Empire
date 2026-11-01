@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { BUSINESS_LEVELS, STAFF } from '../src/data/balance';
 import { STATIONS, YARD } from '../src/data/layout';
-import { PURCHASE } from '../src/data/upgrades';
+import { PURCHASE, UPGRADE_EFFECTS, UPGRADES } from '../src/data/upgrades';
+import { PLAYER } from '../src/data/player';
+import { staffCapacity, staffSpeed } from '../src/sim/effective';
 import { memoryStorage } from '../src/platform/memoryStorage';
 import { SAVE_KEYS, SaveManager } from '../src/save/saveManager';
 import { parseGrid } from '../src/sim/grid';
 import { findPath, walkable } from '../src/sim/path';
 import { Simulation } from '../src/sim/simulation';
 import { createNewGame, isGameState, sanitizeState, secondsToTicks, type GameState } from '../src/sim/state';
+import type { SimEvent } from '../src/sim/events';
 import type { StaffHutDef } from '../src/sim/stations';
 import { newInteractionState, stepInteraction } from '../src/sim/systems/interaction';
 
@@ -139,14 +142,51 @@ describe('employees', () => {
     expect(targets).toHaveLength(1);
   });
 
-  it('never spend or sell', () => {
+  it('never spend money', () => {
     const state = createNewGame(grid, STATIONS);
     state.money = 5000;
-    state.bins['bin-iron']!.count = 30;
     for (let i = 0; i < 4; i++) addEmployee(state, 10.5 + i, 12.5);
     run(simWith(state), 60);
-    expect(state.money).toBe(5000);
+    expect(state.money).toBeGreaterThanOrEqual(5000);
     expect(state.upgrades.carry).toBe(0);
+    expect(state.employees).toHaveLength(4);
+  });
+
+  it('keep the shredder going when the iron bin is full, by selling the overflow at the Scrap Dealer', () => {
+    const state = createNewGame(grid, STATIONS);
+    state.field.pieces = [];
+    state.truck.timer = secondsToTicks(600);
+    state.bins['bin-iron']!.count = 30;
+    const shredder = state.processors.shredder!;
+    shredder.tray.iron = 11;
+    shredder.hopper = 6;
+    state.upgrades.staffCarry = 3;
+    addEmployee(state, 24.5, 14.5);
+    const sold: SimEvent[] = [];
+    const drained: SimEvent[] = [];
+    const sim = simWith(state);
+    for (let i = 0; i < 4 * 60; i++) {
+      sim.advance(250);
+      sold.push(...sim.drainEvents(drained).filter((e) => e.type === 'sold'));
+    }
+    expect(shredder.hopper).toBe(0);
+    expect(shredder.progress).toBe(0);
+    expect(sold.length).toBeGreaterThan(0);
+    expect(sold.every((e) => e.type === 'sold' && e.station === 'dealer')).toBe(true);
+    expect(state.money).toBeGreaterThan(0);
+    expect(state.bins['bin-iron']!.count).toBe(30);
+  });
+
+  it('clear a line stuck on old products by selling them at the stall', () => {
+    const state = createNewGame(grid, STATIONS);
+    state.field.pieces = [];
+    state.truck.timer = secondsToTicks(600);
+    state.earned = 1e9;
+    Object.assign(state.lines['line-1']!, { built: true, product: 'can', out: 3, outItem: 'sheet' });
+    addEmployee(state, 38.5, 17.5);
+    run(simWith(state), 40);
+    expect(state.lines['line-1']!.out).toBe(0);
+    expect(state.money).toBeGreaterThan(0);
   });
 });
 
@@ -162,5 +202,54 @@ describe('save v9 → v10', () => {
     const state = sanitizeState(loaded!.state, grid, STATIONS);
     expect(state.employees).toEqual([]);
     expect(state.hirePaid).toBe(0);
+  });
+});
+
+describe('staff upgrades', () => {
+  it('start employees slower than the player with small hands, and grow both per level', () => {
+    const state = createNewGame(grid, STATIONS);
+    expect(staffSpeed(state)).toBeLessThan(PLAYER.speed / 2 + 0.01);
+    expect(staffCapacity(state)).toBe(STAFF.capacity);
+    state.upgrades.staffSpeed = UPGRADES.staffSpeed.maxLevel;
+    state.upgrades.staffCarry = UPGRADES.staffCarry.maxLevel;
+    expect(staffSpeed(state)).toBeCloseTo(STAFF.speed + UPGRADE_EFFECTS.staffSpeedPerLevel * UPGRADES.staffSpeed.maxLevel);
+    expect(staffCapacity(state)).toBe(STAFF.capacity + UPGRADES.staffCarry.maxLevel);
+  });
+
+  it('let an employee carry more per trip once upgraded', () => {
+    const run = (carry: number) => {
+      const state = createNewGame(grid, STATIONS);
+      state.upgrades.staffCarry = carry;
+      state.field.pieces = [];
+      state.truck.timer = secondsToTicks(600);
+      state.processors.shredder!.tray.iron = 8;
+      addEmployee(state, 24.5, 14.5);
+      const sim = simWith(state);
+      let most = 0;
+      for (let i = 0; i < 80; i++) {
+        sim.advance(250);
+        most = Math.max(most, state.employees[0]!.stack.length);
+      }
+      return most;
+    };
+    expect(run(0)).toBe(STAFF.capacity);
+    expect(run(3)).toBe(STAFF.capacity + 3);
+  });
+});
+
+describe('save v11 → v12', () => {
+  it('adds the staff upgrades at level 0', () => {
+    const store = memoryStorage();
+    const v11 = structuredClone(createNewGame(grid, STATIONS)) as unknown as Record<string, any>;
+    for (const key of ['upgrades', 'upgradePaid']) {
+      delete v11[key].staffSpeed;
+      delete v11[key].staffCarry;
+    }
+    v11.upgrades.carry = 2;
+    store.setItem(SAVE_KEYS.main, JSON.stringify({ v: 11, savedAt: 0, state: v11 }));
+    const loaded = new SaveManager(store, isGameState).load();
+    expect(loaded).not.toBeNull();
+    const state = sanitizeState(loaded!.state, grid, STATIONS);
+    expect(state.upgrades).toMatchObject({ carry: 2, staffSpeed: 0, staffCarry: 0 });
   });
 });

@@ -3,6 +3,7 @@ import { itemName, t } from '../i18n';
 import { metalUnlocked } from '../sim/effective';
 import type { Simulation } from '../sim/simulation';
 import type { BinDef } from '../sim/stations';
+import { cssColor } from './recipes';
 
 /** How many one tap of the smaller button sells. */
 const SMALL_BATCH = 10;
@@ -23,17 +24,24 @@ export class StockCard {
     private readonly sim: Simulation,
   ) {
     this.el = document.createElement('div');
-    this.el.className = 'recipe-card stock-card';
+    this.el.className = 'game-card stock-card';
     this.el.hidden = true;
+    const head = document.createElement('div');
+    head.className = 'card-head';
+    const titles = document.createElement('div');
+    titles.className = 'card-titles';
     const title = document.createElement('h2');
     title.textContent = t('stock.title');
-    this.rows = document.createElement('div');
+    titles.append(title);
     const close = document.createElement('button');
     close.type = 'button';
-    close.className = 'recipe-close';
+    close.className = 'btn btn-go';
     close.textContent = t('recipes.close');
     close.addEventListener('click', () => this.close());
-    this.el.append(title, this.rows, close);
+    head.append(titles, close);
+    this.rows = document.createElement('div');
+    this.rows.className = 'stock-rows';
+    this.el.append(head, this.rows);
     // Taps on the card must not move the joystick underneath.
     this.el.addEventListener('pointerdown', (e) => e.stopPropagation());
     layer.append(this.el);
@@ -69,7 +77,10 @@ export class StockCard {
   private row(bin: BinDef): HTMLDivElement {
     const count = this.sim.state.bins[bin.id]!.count;
     const row = document.createElement('div');
-    row.className = 'recipe-row stock-row';
+    row.className = 'stock-row';
+    const swatch = document.createElement('div');
+    swatch.className = 'tile-swatch';
+    swatch.style.background = cssColor(bin.item);
     const name = document.createElement('div');
     name.className = 'stock-name';
     const title = document.createElement('b');
@@ -80,7 +91,7 @@ export class StockCard {
     const sell = (n: number, label: string) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'recipe-option stock-sell';
+      b.className = n === count ? 'btn btn-paper stock-sell' : 'btn btn-safety stock-sell';
       b.disabled = count === 0;
       b.innerHTML = '';
       const what = document.createElement('b');
@@ -94,7 +105,7 @@ export class StockCard {
       });
       return b;
     };
-    row.append(name, sell(SMALL_BATCH, t('stock.sellSome', { n: SMALL_BATCH })), sell(count, t('stock.sellAll')));
+    row.append(swatch, name, sell(SMALL_BATCH, t('stock.sellSome', { n: SMALL_BATCH })), sell(count, t('stock.sellAll')));
     return row;
   }
 }

@@ -1,5 +1,5 @@
 import { LINE_OUTPUT } from '../../data/balance';
-import type { MetalId, ProductId } from '../../data/items';
+import { isProduct, type MetalId, type ProductId } from '../../data/items';
 import { RECIPES, recipeMetals } from '../../data/recipes';
 import { lineBatchTicks, productUnlocked } from '../effective';
 import type { SimEvent } from '../events';
@@ -86,6 +86,41 @@ export function lineStatus(
   if (st.progress > 0) return 'processing';
   if (st.out >= LINE_OUTPUT || holdingOldProducts(st)) return 'blocked';
   return missingInput(st.product, binDefs, bins) ? 'starved' : 'idle';
+}
+
+/**
+ * Auto lines follow the trucks (once there are employees to run them): an idle Auto line whose product no
+ * waiting truck still needs switches to one that a truck does need and no other line is making, preferring
+ * one whose metals are in the bins. Returns true if any line changed.
+ */
+export function autoAssignLines(factory: FactoryDef, binDefs: ReadonlyMap<string, BinDef>, state: GameState): boolean {
+  if (state.employees.length === 0) return false;
+  // What waiting and arriving trucks still need, less what's already sitting on output spots.
+  const need = new Map<ProductId, number>();
+  for (const bay of Object.values(state.bays)) {
+    if ((bay.phase === 'waiting' || bay.phase === 'arriving') && bay.item && isProduct(bay.item)) {
+      need.set(bay.item, (need.get(bay.item) ?? 0) + bay.want - bay.have);
+    }
+  }
+  for (const line of factory.lines) {
+    const st = state.lines[line.id]!;
+    if (st.outItem && need.has(st.outItem)) need.set(st.outItem, need.get(st.outItem)! - st.out);
+  }
+  let changed = false;
+  for (const line of factory.lines) {
+    const st = state.lines[line.id]!;
+    if (!st.built || !st.auto || st.progress > 0 || (need.get(st.product) ?? 0) > 0) continue;
+    const taken = new Set(factory.lines.filter((l) => l !== line && state.lines[l.id]!.built).map((l) => state.lines[l.id]!.product));
+    const wanted = [...need.entries()]
+      .filter(([p, n]) => n > 0 && !taken.has(p) && productUnlocked(p, state))
+      .sort((a, b) => Number(!!missingInput(a[0], binDefs, state.bins)) - Number(!!missingInput(b[0], binDefs, state.bins)) || b[1] - a[1]);
+    const pick = wanted[0]?.[0];
+    if (pick && pick !== st.product) {
+      st.product = pick;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 /**
