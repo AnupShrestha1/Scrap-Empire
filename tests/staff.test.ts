@@ -56,18 +56,19 @@ describe('hiring', () => {
     for (let i = 0; i < ticks; i++) stepInteraction(state, STATIONS, inter, []);
   }
 
-  it('costs more for each hire, keeps partial payments and stops at the cap', () => {
+  it('costs more for each hire, takes nothing until affordable and stops at the cap', () => {
     const state = createNewGame(grid, STATIONS);
     state.money = 100;
     standOnHire(state, secondsToTicks(6));
     expect(state.employees).toHaveLength(0);
-    expect(state.hirePaid).toBe(100);
+    expect(state.hirePaid).toBe(0);
+    expect(state.money).toBe(100);
 
     state.money = 100_000;
     standOnHire(state, secondsToTicks(60));
     expect(state.employees).toHaveLength(STAFF.costs.length);
     const total = STAFF.costs.reduce((a, b) => a + b, 0);
-    expect(state.money).toBe(100_000 - (total - 100));
+    expect(state.money).toBe(100_000 - total);
   });
 
   it('waits for the stand-still like every pad that spends', () => {

@@ -6,17 +6,17 @@ v0.2, 2026-10-30. M0 is implemented. Read alongside [GAME_DESIGN.md](GAME_DESIGN
 
 | Piece | Choice | Why |
 |---|---|---|
-| Engine | **Phaser 4.2.x** (4.2.1 is the latest stable on npm; pin the exact version) | Scenes, camera, input, tweens, loader and audio in one ~lightweight package. Phaser 3 ended at 3.90; v4 is the supported line. |
+| Renderer | **Three.js 0.186** (pinned) | 3D since 2026-11-01 (see [3D_PLAN.md](3D_PLAN.md)). A renderer rather than a framework, so it fits the sim/view split; loads glTF, the format the free model packs ship in. Replaced Phaser 4, which is 2D only. |
 | Language | TypeScript, strict mode | Type-checked content IDs and balance data; safer refactors as the game grows |
 | Build | Vite | Fast dev server, small production bundles, relative paths (CrazyGames forbids absolute paths) |
 | Tests | Vitest | Unit tests for the simulation, economy, saves and offline progress |
 | Platform | CrazyGames SDK v3 (`https://sdk.crazygames.com/crazygames-sdk-v3.js`) | Loaded only in CrazyGames builds. The game runs without it. |
 
-There are no other runtime dependencies. Phaser 4 has fewer community plugins than Phaser 3, but we only use core features and write the joystick and UI ourselves.
+There are no other runtime dependencies. We write the joystick, UI and audio ourselves. Models are Kenney's CC0 packs (`public/models/CREDITS.md`), plus objects built in code.
 
 ## 2. Key decisions
 
-**D1. The simulation is separate from rendering.** `src/sim` is plain TypeScript with no Phaser imports. It runs at a fixed 20 ticks/s, and the view draws the state every frame with interpolation.
+**D1. The simulation is separate from rendering.** `src/sim` is plain TypeScript with no rendering imports. It runs at a fixed 20 ticks/s, and the view draws the state every frame with interpolation.
 - Identical behaviour at 60, 144 and 165 Hz (a CrazyGames requirement).
 - The game logic can be unit-tested without a browser.
 - Offline progress reuses the same code.
@@ -41,16 +41,15 @@ Because every route is fixed, no pathfinding is needed.
 
 **D6. UI split.**
 - The HUD, panels and toasts are a DOM overlay on top of the canvas, built from small vanilla-TS components and CSS.
-- Lamps, progress rings, gauges and floating text are drawn in Phaser.
+- Lamps and progress rings are drawn in 3D; labels and floating text are DOM elements pinned to world points (`view/labels.ts`).
 
 Why: DOM text stays sharp at 800×450 with no high-DPI scaling, where scaled canvas text blurs. CSS handles the responsive layout, and large touch targets come easily. The cost is two layers to keep in step; the UI reads simulation state through the same event queue as the view (D10).
 
 **D7. Rendering and scaling.**
-- Phaser's RESIZE scale mode fills the iframe.
-- The camera follows the player. Zoom is chosen so at least ~22×12 tiles are visible on any screen, so phones don't show too little and 1080p doesn't show too much.
-- All art is generated at boot from code into one texture atlas, at 2× resolution so it stays crisp when zoomed. One atlas also means few draw calls.
-- Isometric view (`src/view/iso.ts`): the simulation's square grid is projected to 2:1 diamonds. The whole ground is baked into one canvas texture at startup (one draw call; Phaser's isometric tilemaps only load Tiled files). Every upright object is a sprite whose depth is its grid x + y, so nearer things draw over farther ones. Input is read in screen directions and converted to grid directions, so "up" on the stick walks up the screen.
-- Phaser's WebGL renderer, with handling for lost and restored contexts (a Safari risk).
+- The canvas fills the iframe; the pixel ratio is capped (2 on desktop, 1.5 on touch devices).
+- 3D world: tile (x, y) of the simulation grid is world (x, 0, y), one unit per tile. A perspective camera looks north, 46° down, following the player; its distance shows about 300 tiles of ground whatever the screen shape (`VIEW` in `config.ts`). Because it looks north, stick directions are grid directions.
+- The ground is one plane with one baked canvas texture. Trees, fence posts and rails, scrap pieces and stored bars are instanced meshes, so the scene stays around 100–170 draw calls with shadows.
+- One sun with a shadow box that follows the camera, plus sky light; light fog at the edges.
 
 **D8. Platform adapter.** One interface (the ad methods are added in M5):
 
@@ -97,7 +96,7 @@ interface Platform {
 
 ```
 Keyboard / joystick ─┐
-UI panels ───────────┼─▶ command queue ─▶ SIM TICK (20/s) ─▶ event queue ─▶ Phaser view · DOM UI · audio
+UI panels ───────────┼─▶ command queue ─▶ SIM TICK (20/s) ─▶ event queue ─▶ 3D view · DOM UI · audio
                      │                         │
                      │                    GameState (plain data)
                      │                         │
@@ -124,8 +123,8 @@ Systems run in this order each tick:
 index.html
 vite.config.ts
 src/
-  main.ts                platform init → load save → start Phaser
-  sim/                   pure game logic, no Phaser
+  main.ts                platform init → load save → load models → start the 3D world
+  sim/                   pure game logic, no rendering
     state.ts             GameState types, createNewGame()
     simulation.ts        fixed step, command queue, event queue
     economy.ts           cost curves, prices
@@ -134,11 +133,15 @@ src/
                          objectives, offline
   data/                  items, machines, recipes, upgrades, supplier,
                          objectives, layout
-  view/
-    scenes/              BootScene (generate textures), WorldScene
-    renderers/           one per station type, reading sim state
-    art/                 code-drawn sprite generators
-    fx/                  floating text and pooled effects
+  view/                  Three.js view
+    world.ts             renderer, camera, lights, frame loop, event feedback
+    stations.ts          one view per station, trucks, staff, hint arrow
+    field.ts             instanced scrap on the dump site
+    character.ts         animated player and employees with their stacks
+    props.ts, ground.ts  objects built in code; the yard floor and scenery
+    assets.ts            model loading, fitting and baking for instancing
+    labels.ts            DOM labels pinned to world points
+public/models/           Kenney CC0 models (GLB) and their palette textures
   ui/                    hud, panels, toasts, styles.css
   input/                 keyboard, joystick
   platform/              Platform interface, crazygames, local
@@ -175,7 +178,7 @@ Everything is drawn in code, styled after the user's reference images.
 | Background tabs throttle timers | Bugs | Fixed-step simulation with capped catch-up; offline path for long gaps |
 | Offline exploits (changing the clock) or drift | Broken economy | Clamp elapsed time; same rules at a coarse step; tests against real time |
 | Corrupt saves or slow cloud sync | Lost progress | Backup slot, validation, save on `pagehide`, small saves |
-| Phaser 4 has fewer examples | Slower development | Core features only, no third-party plugins |
+| 3D is heavier on low-end devices | Disabled on ChromeOS, poor phone play | Instancing, capped pixel ratio, smaller shadow maps on phones, debug overlay with draw calls |
 | iOS Safari: audio unlock, lost WebGL contexts, memory | Game disabled on Safari | Resume audio on a tap, handle context restore, small textures |
 | Code-drawn art falls short | Low click-through, weaker reviews | Get references early, dedicated art pass, careful cover art (CrazyGames thumbnails matter) |
 | Scope creep | Delays | v1 content cap and out-of-scope list in the design doc |
@@ -185,10 +188,10 @@ Everything is drawn in code, styled after the user's reference images.
 
 | Measure | Budget |
 |---|---|
-| Initial download | Under 5 MB (platform limit for the mobile homepage: 20 MB) |
+| Initial download | Under 8 MB; currently 3.0 MB (platform limit for the mobile homepage: 20 MB) |
 | Simulation tick | Under 2 ms on a mid-range laptop |
-| Active sprites | Under 600 |
-| Textures | One generated atlas, plus UI |
+| Draw calls | Under 150 typical, with shadows |
+| Models | Kenney GLBs sharing palette textures, about 1.5 MB |
 | Tab memory | Under 200 MB |
 
 ## 8. Milestones

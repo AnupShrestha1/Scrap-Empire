@@ -69,19 +69,19 @@ describe('cash pads', () => {
     expect(events.some((e) => e.type === 'upgraded')).toBe(true);
   });
 
-  it('keep a partial payment when the player runs out of cash', () => {
+  it('take no money until the player can pay the whole price', () => {
     const state = createNewGame(grid, STATIONS);
-    state.money = 10;
+    state.money = UPGRADES.carry.cost - 1;
     const events = standOnCarryPad(state, secondsToTicks(5));
-    expect(state.money).toBe(0);
-    expect(state.upgradePaid.carry).toBe(10);
+    expect(state.money).toBe(UPGRADES.carry.cost - 1);
+    expect(state.upgradePaid.carry).toBe(0);
     expect(state.upgrades.carry).toBe(0);
-    expect(events.filter((e) => e.type === 'needCash')).toHaveLength(1);
+    expect(events.filter((e) => e.type === 'needCash')).toEqual([{ type: 'needCash', amount: UPGRADES.carry.cost }]);
 
     state.money = 100;
     standOnCarryPad(state, secondsToTicks(PURCHASE.delayS + PURCHASE.payS) + 2, [], () => state.upgrades.carry === 1);
     expect(state.upgrades.carry).toBe(1);
-    expect(state.money).toBe(100 - (UPGRADES.carry.cost - 10));
+    expect(state.money).toBe(100 - UPGRADES.carry.cost);
   });
 
   it('keep buying the next level after a pause while the player stays', () => {

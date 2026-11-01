@@ -36,7 +36,6 @@ body {
   touch-action: none;
 }
 
-/* The canvas is rendered at device resolution and stretched back to CSS size here. */
 #game canvas {
   display: block;
   width: 100% !important;
@@ -366,4 +365,68 @@ body {
 .hud-drop:not(:disabled):active {
   transform: translateY(2px);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* World-pinned labels over the 3D view (src/view/labels.ts). */
+.labels3d {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.label3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font: 700 12px/1.2 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #fff;
+  text-shadow: 0 1px 0 #1e1b24, 0 0 3px #1e1b24, 0 0 3px #1e1b24;
+  will-change: transform;
+}
+
+.label3d.pad-title {
+  padding: 2px 7px;
+  border-radius: 9px;
+  background: rgba(19, 36, 58, 0.72);
+  text-shadow: none;
+  text-align: center;
+  color: #ffd76a;
+}
+
+.label3d.pad-title small {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  color: #cfe3ff;
+}
+
+.label3d.pad-title.locked {
+  color: #9fb3c8;
+}
+
+.label3d.bin-count {
+  font-size: 11px;
+}
+
+.label3d.bin-count.warn {
+  color: #ff8a7a;
+}
+
+.label3d.bubble {
+  padding: 4px 9px;
+  border-radius: 10px;
+  background: #fff;
+  color: #1e1b24;
+  text-shadow: none;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.label3d.float {
+  font-size: 16px;
+}
+
+.label3d.float.cash {
+  color: #ffd76a;
 }

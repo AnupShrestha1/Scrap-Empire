@@ -2,7 +2,7 @@ import { SIM, TICK_MS } from '../config';
 import type { ProcessorStatus, SimEvent } from './events';
 import type { Grid } from './grid';
 import type { GameState } from './state';
-import type { BayDef, BinDef, DumpDef, FactoryDef, LineDef, ProcessorDef, StationDef } from './stations';
+import type { BayDef, BinDef, DumpDef, FactoryDef, LineDef, ProcessorDef, Rect, StationDef } from './stations';
 import { stepBay } from './systems/bays';
 import { stepStaff, type Brain, type StaffWorld } from './systems/staff';
 import { dropStack, stepField } from './systems/field';
@@ -15,6 +15,7 @@ import { stepObjectives } from './systems/objectives';
 import { processorStatus, stepProcessor } from './systems/processing';
 import { stepSupplier } from './systems/supplier';
 import type { Vec2 } from './vec';
+import { truckRects } from './vehicles';
 
 /**
  * Runs the game rules at a fixed tick rate, independent of the display's refresh rate.
@@ -45,6 +46,9 @@ export class Simulation {
   private readonly factories: readonly FactoryDef[];
   private readonly bayDefs: readonly BayDef[];
   private readonly staffWorld: StaffWorld;
+  /** Ground covered by trucks this tick, solid to the player. */
+  private readonly trucks: Rect[] = [];
+  private readonly bayStates: { def: BayDef; bay: GameState['bays'][string] }[];
   /** Employees' current plans, by employee id; not saved. */
   readonly brains = new Map<number, Brain>();
   /** Bin definitions by id, for machines that pull from them. */
@@ -61,6 +65,7 @@ export class Simulation {
     this.processorDefs = stations.filter((s): s is ProcessorDef => s.kind === 'processor');
     this.factories = stations.filter((s): s is FactoryDef => s.kind === 'factory');
     this.bayDefs = stations.filter((s): s is BayDef => s.kind === 'bay');
+    this.bayStates = this.bayDefs.map((def) => ({ def, bay: state.bays[def.id]! }));
     this.binDefs = new Map(stations.filter((s): s is BinDef => s.kind === 'bin').map((b) => [b.id, b]));
     this.staffWorld = {
       grid,
@@ -134,7 +139,8 @@ export class Simulation {
     const p = state.player;
     this.prevPlayer.x = p.x;
     this.prevPlayer.y = p.y;
-    let changed = stepPlayer(p, this.move, this.grid, TICK_MS / 1000);
+    truckRects(state.truck, this.bayStates, this.trucks);
+    let changed = stepPlayer(p, this.move, this.grid, TICK_MS / 1000, this.trucks);
     if (this.dropRequested) {
       this.dropRequested = false;
       changed = dropStack(state, this.grid, events) || changed;

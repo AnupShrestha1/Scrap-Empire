@@ -16,9 +16,10 @@
     "balance": "vitest run --config tools/vitest.config.ts"
   },
   "dependencies": {
-    "phaser": "4.2.1"
+    "three": "0.186.0"
   },
   "devDependencies": {
+    "@types/three": "0.186.0",
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.0.5"

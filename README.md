@@ -1,6 +1,6 @@
 # Scrap Empire
 
-A 2D recycling and manufacturing tycoon for [CrazyGames](https://www.crazygames.com/), built with Phaser 4, TypeScript and Vite.
+A 2D recycling and manufacturing tycoon for [CrazyGames](https://www.crazygames.com/), built in 3D with Three.js, TypeScript and Vite. Models are Kenney's CC0 packs.
 
 - Game design: [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md)
 - Architecture and milestones: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

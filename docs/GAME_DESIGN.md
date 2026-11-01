@@ -4,7 +4,7 @@ v0.2, 2026-10-30. All changes in §3 are approved. This is the source of truth f
 
 ## 1. Pitch
 
-A 2D recycling tycoon for CrazyGames, seen in an isometric (diamond-grid) view. You start with a tiny scrapyard and do everything by hand: grab scrap from the delivery pile, feed the shredder, sort what comes out into bins, turn materials into products and sell them. Profits buy workers, conveyors and bigger machines until the yard runs itself, and your job becomes growing and tuning it.
+A 3D recycling tycoon for CrazyGames, in the low-poly style of today's idle-arcade tycoons. You start with a tiny scrapyard and do everything by hand: grab scrap from the delivery pile, feed the shredder, sort what comes out into bins, turn materials into products and sell them. Profits buy workers, conveyors and bigger machines until the yard runs itself, and your job becomes growing and tuning it.
 
 Genre: "idle arcade" tycoon, built for active play. Progress needs the player present and making decisions. Automation keeps the yard running while you play, plus a capped offline trickle.
 
@@ -32,7 +32,7 @@ Genre: "idle arcade" tycoon, built for active play. Progress needs the player pr
 | K | v1 content cap: 3 scrap types, 6 materials, 6 products, 2 machine tiers. Glass and vehicle scrap move to post-launch updates | Approved |
 | L | Buying happens on in-world cash pads (build/unlock) and machine terminals (upgrades) | Approved |
 | M | Rare salvage crates that only the player can carry, giving the character a late-game job | Approved |
-| N | Isometric view (2:1 diamond grid, as in the art reference) instead of true top-down. The simulation stays on a square grid; only the view projects it | Approved |
+| N | Isometric view (2:1 diamond grid, as in the art reference) instead of true top-down. The simulation stays on a square grid; only the view projects it | Replaced 2026-11-01 by low-poly 3D ([3D_PLAN.md](3D_PLAN.md)) |
 | O | One factory building with production lines bought one at a time, instead of separate machines on plots | Approved (user's direction, M2a) |
 | P | Products sell the moment they are made: no product racks and no carrying products | Approved (user's direction, M2a) |
 | Q | Pads that sell, spend or give items back never sit on walking routes, and wait for the player to stand still | Approved (user's direction, M2a) |
@@ -218,7 +218,7 @@ Each step is bought in this order:
 
 ### 7.13 Art direction
 
-- Isometric view: diamond ground tiles; machines, bins, fences and characters show two side faces and are depth-sorted by how far down the screen they stand, so the worker can walk behind them. See [ART_DIRECTION.md](ART_DIRECTION.md).
+- 3D view: a camera following the player from a high angle, low-poly models with soft shadows. See [ART_DIRECTION.md](ART_DIRECTION.md).
 - Drawn in code: stylised, clean shapes, bold outlines, a warm industrial palette.
 - Each material has its own colour and its own icon shape, so it stays readable for colour-blind players. Proposed colours: iron blue-grey, aluminium silver, copper orange, plastic teal, components green, gold yellow.
 - Style details will be matched to the reference images (pending from the user).

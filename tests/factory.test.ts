@@ -40,12 +40,13 @@ describe('building lines', () => {
     expect(lineStatus(press, state.lines.press!, binDefs, state.bins)).toBe('unbuilt');
   });
 
-  it('builds lines in order on the one build pad, keeping partial payments', () => {
+  it('builds lines in order on the one build pad, only once the player can afford one', () => {
     const state = createNewGame(grid, STATIONS);
     const pad = factory.zones.build;
     state.money = 50;
     standAt(state, pad.x, pad.y, 200);
-    expect(state.buildPaid.press).toBe(50);
+    expect(state.buildPaid.press).toBe(0);
+    expect(state.money).toBe(50);
     expect(state.lines.press!.built).toBe(false);
 
     // The Can line needs business level 2.
@@ -54,7 +55,7 @@ describe('building lines', () => {
     const events = standAt(state, pad.x, pad.y, 400, [], () => state.lines['can-line']!.built);
     expect(state.lines.press!.built).toBe(true);
     expect(state.lines['can-line']!.built).toBe(true);
-    expect(state.money).toBe(1000 - (BUILD_COSTS.press - 50) - BUILD_COSTS.canLine);
+    expect(state.money).toBe(1000 - BUILD_COSTS.press - BUILD_COSTS.canLine);
     expect(events.filter((e) => e.type === 'built').map((e) => (e as { station: string }).station)).toEqual(['press', 'can-line']);
     expect(nextUnbuiltLine(factory, state)).toBeUndefined();
   });

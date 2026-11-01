@@ -1,4 +1,5 @@
 import './ui/styles.css';
+import { Vector2 } from 'three';
 import type { GameContext } from './context';
 import { STATIONS, TRUCK_ROUTE, YARD } from './data/layout';
 import { DebugOverlay } from './debug/overlay';
@@ -14,7 +15,8 @@ import { Sfx } from './audio/sfx';
 import { SettingsStore } from './settings';
 import { Hud } from './ui/hud';
 import { Toasts } from './ui/toasts';
-import { createGame } from './view/game';
+import { loadModels } from './view/assets';
+import { World } from './view/world';
 
 async function boot(): Promise<void> {
   const gameEl = requireElement('game');
@@ -45,8 +47,22 @@ async function boot(): Promise<void> {
   const settings = new SettingsStore(platform.storage);
   const sfx = new Sfx(() => !settings.value.sound || platform.audioMuted());
   const ctx: GameContext = { platform, sim, input, settings, sfx, hud: new Hud(uiEl, settings, () => sim.requestDrop()), toasts: new Toasts(uiEl) };
-  const game = createGame(gameEl, ctx);
-  new DebugOverlay(uiEl, game, ctx, {
+
+  const bar = document.querySelector<HTMLElement>('.loader-bar');
+  const models = await loadModels((done) => bar?.style.setProperty('width', `${Math.round(done * 100)}%`));
+  const world = new World(gameEl, ctx, models, uiEl);
+  document.getElementById('loader')?.remove();
+  platform.loadingStop();
+  world.start();
+  platform.gameplayStart();
+
+  const fps = fpsCounter();
+  new DebugOverlay(uiEl, ctx, {
+    viewLines: () => {
+      const { calls, triangles } = world.renderer.info.render;
+      const size = world.renderer.getDrawingBufferSize(new Vector2());
+      return [`fps     ${fps()}`, `draws   ${calls}  tris ${Math.round(triangles / 1000)}k`, `canvas  ${size.x}×${size.y}`];
+    },
     resetSave: () => {
       autosave.stop();
       for (const key of Object.values(SAVE_KEYS)) platform.storage.removeItem(key);
@@ -54,7 +70,26 @@ async function boot(): Promise<void> {
     },
   });
 
-  if (import.meta.env.DEV) Object.assign(window, { scrap: { ...ctx, saves, autosave, game } });
+  if (import.meta.env.DEV) Object.assign(window, { scrap: { ...ctx, saves, autosave, world } });
+}
+
+/** Frames per second, counted over the last second. */
+function fpsCounter(): () => number {
+  let frames = 0;
+  let fps = 0;
+  let since = performance.now();
+  const tick = () => {
+    frames++;
+    const now = performance.now();
+    if (now - since >= 1000) {
+      fps = Math.round((frames * 1000) / (now - since));
+      frames = 0;
+      since = now;
+    }
+    requestAnimationFrame(tick);
+  };
+  tick();
+  return () => fps;
 }
 
 function requireElement(id: string): HTMLElement {

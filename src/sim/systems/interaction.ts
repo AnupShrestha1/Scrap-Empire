@@ -80,13 +80,14 @@ export function stepInteraction(
 }
 
 /**
- * Takes this tick's slice of a payment, after the player has stood still briefly. Warns once per visit
- * when they have no cash. Returns the amount taken (0 if none).
+ * Takes this tick's slice of a payment, after the player has stood still briefly. Nothing is taken
+ * unless the player can pay everything still owed, so cash is never tied up in a half-paid purchase;
+ * they're warned once per visit instead. Returns the amount taken (0 if none).
  */
 function takePayment(state: GameState, inter: InteractionState, events: SimEvent[], cost: number, paid: number): number {
   if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return 0;
   const owed = cost - paid;
-  if (state.money === 0) {
+  if (state.money < owed) {
     if (!inter.warned) events.push({ type: 'needCash', amount: owed });
     inter.warned = true;
     return 0;
@@ -106,7 +107,7 @@ function warnLocked(inter: InteractionState, events: SimEvent[], why: { level?: 
   return false;
 }
 
-/** Pays towards the pad's upgrade, a slice per tick. Partial payment is kept. */
+/** Pays for the pad's upgrade, a slice per tick. */
 function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState, events: SimEvent[]): boolean {
   const id = pad.upgrade;
   const level = state.upgrades[id];
@@ -128,7 +129,7 @@ function stepPurchase(state: GameState, pad: CashPadDef, inter: InteractionState
   return true;
 }
 
-/** Pays towards the next employee; when paid, they appear at the hut. Partial payment is kept. */
+/** Pays for the next employee; when paid, they appear at the hut. */
 function stepHire(state: GameState, hut: StaffHutDef, inter: InteractionState, events: SimEvent[]): boolean {
   const count = state.employees.length;
   const cost = STAFF.costs[count];
@@ -147,7 +148,7 @@ function stepHire(state: GameState, hut: StaffHutDef, inter: InteractionState, e
   return true;
 }
 
-/** Pays towards the factory's next production line. Partial payment is kept. */
+/** Pays for the factory's next production line. */
 function stepBuild(state: GameState, factory: FactoryDef, inter: InteractionState, events: SimEvent[]): boolean {
   const line = nextUnbuiltLine(factory, state);
   if (!line) return false;

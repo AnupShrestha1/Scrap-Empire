@@ -10,15 +10,18 @@ export const SIM = {
 export const TICK_MS = 1000 / SIM.tickRate;
 
 export const VIEW = {
-  /** Isometric tile diamond in render pixels (2:1). */
-  tileW: 64,
-  tileH: 32,
-  /** The camera zooms so at least this much of the world (render pixels) is visible on any screen. */
-  minVisiblePx: { w: 1152, h: 648 },
-  /** Cap on devicePixelRatio, so low-end GPUs never get a huge canvas. */
-  maxDpr: 2,
+  /** Camera tilt down from the horizon, and its vertical field of view, in degrees. */
+  pitchDeg: 46,
+  fov: 34,
+  /** Tiles of ground on screen; the camera distance follows from this and the screen shape. */
+  visibleArea: 300,
+  /** The camera looks this many tiles north of the player, so they sit below centre, clear of the HUD. */
+  leadTiles: 1,
   /** How quickly the camera catches up with the player, per second. */
-  cameraFollowRate: 8,
+  cameraFollowRate: 7,
+  /** Caps on devicePixelRatio, so low-end GPUs never get a huge canvas. */
+  maxDpr: 2,
+  maxDprMobile: 1.5,
 } as const;
 
 export const INPUT = {

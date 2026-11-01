@@ -1,6 +1,4 @@
-import type Phaser from 'phaser';
 import type { GameContext } from '../context';
-import { SCENE } from '../view/keys';
 
 const REFRESH_MS = 250;
 const SPEEDS = [1, 4, 16] as const;
@@ -8,6 +6,8 @@ const SPEEDS = [1, 4, 16] as const;
 export interface DebugActions {
   /** Wipes the save and reloads into a new game. */
   resetSave(): void;
+  /** Renderer readout lines (frame rate, draw calls and so on). */
+  viewLines(): string[];
 }
 
 /**
@@ -21,9 +21,8 @@ export class DebugOverlay {
 
   constructor(
     layer: HTMLElement,
-    private readonly game: Phaser.Game,
     private readonly ctx: GameContext,
-    actions: DebugActions,
+    private readonly actions: DebugActions,
   ) {
     this.el = document.createElement('div');
     this.el.className = 'debug-overlay';
@@ -62,14 +61,11 @@ export class DebugOverlay {
   private render(): void {
     if (this.el.hidden) return;
     const { sim, platform } = this.ctx;
-    const world = this.game.scene.getScene(SCENE.world) as Phaser.Scene | null;
     const { player, truck } = sim.state;
     this.readout.textContent = [
-      `fps     ${this.game.loop.actualFps.toFixed(0)}`,
+      ...this.actions.viewLines(),
       `sim     ${sim.lastAdvanceMs.toFixed(2)} ms/frame`,
       `tick    ${sim.state.tick}`,
-      `objects ${world?.children?.length ?? 0}`,
-      `canvas  ${this.game.scale.width}×${this.game.scale.height}  zoom ${world?.cameras?.main?.zoom.toFixed(2) ?? '-'}`,
       `player  ${player.x.toFixed(2)}, ${player.y.toFixed(2)} ${player.facing}  carrying ${player.stack.length}`,
       `truck   ${truck.phase} (${truck.timer}) load ${truck.load}`,
       `platform ${platform.name}`,
