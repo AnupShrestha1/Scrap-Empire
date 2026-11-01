@@ -1,37 +1,27 @@
 import * as THREE from 'three';
-import { stationLevel } from '../data/unlocks';
-import { t } from '../i18n';
+import { stationOpen } from '../sim/effective';
+import type { GameState } from '../sim/state';
 import type { StationDef } from '../sim/stations';
 import { centre } from './common';
 import type { Puffs } from './fx';
-import type { Label, LabelMaker } from './labels';
 
-export type RevealState = 'hidden' | 'teased' | 'active';
-
-/** Stations with a solid footprint are never fully hidden: an invisible wall would be baffling. */
-const SOLID_KINDS: ReadonlySet<string> = new Set(['processor', 'bin', 'factory', 'staffHut', 'dealer']);
-
-/** How long a newly unlocked station takes to pop in. */
+/** How long a newly opened station takes to pop in. */
 const POP_S = 0.6;
-
-const SILHOUETTE = new THREE.MeshBasicMaterial({ color: 0x2b3044, transparent: true, opacity: 0.55, depthWrite: false });
 
 interface Entry {
   def: StationDef;
-  level: number;
   /** Positioned at the station's centre, so it scales from there... */
   outer: THREE.Group;
   /** ...while this undoes the offset, so children keep their world coordinates. */
   inner: THREE.Group;
-  sign: Label;
-  state: RevealState | null;
+  open: boolean | null;
   age: number;
 }
 
 /**
- * Shows each station according to the business level (docs/PROGRESSION.md §4.1): active when its level
- * is reached, a dark silhouette with a level sign one level before (or earlier, for solid things), and
- * hidden otherwise. A station that becomes active pops in with a puff.
+ * Shows each station only once it's open (effective.ts stationOpen: its business level reached, and for
+ * a bin its metal unlocked). Until then it isn't there at all: not drawn, not solid. A station that opens
+ * pops in with a puff; what's coming next is on the HUD instead.
  */
 export class Reveal {
   private readonly entries = new Map<string, Entry>();
@@ -39,7 +29,6 @@ export class Reveal {
 
   constructor(
     private readonly scene: THREE.Scene,
-    private readonly labels: LabelMaker,
     private readonly puffs: Puffs,
   ) {}
 
@@ -54,33 +43,29 @@ export class Reveal {
       inner.position.copy(c).negate();
       outer.add(inner);
       this.scene.add(outer);
-      // The sign belongs to the outer group, so it shows while the station's own labels are hidden.
-      const sign = this.labels.add('reveal-sign');
-      sign.at.copy(centre(def.rect, 1.2));
-      entry = { def, level: stationLevel(def.id), outer, inner, sign, state: null, age: Infinity };
+      entry = { def, outer, inner, open: null, age: Infinity };
       this.entries.set(def.id, entry);
     }
     return entry.inner;
   }
 
   isActive(id: string): boolean {
-    const entry = this.entries.get(id);
-    return !entry || entry.state === 'active';
+    return this.entries.get(id)?.open !== false;
   }
 
-  /** Applies the business level; returns stations that just became active (after the first call). */
-  update(level: number, dt: number): StationDef[] {
+  /** Shows what's open; returns stations that just opened (after the first call). */
+  update(state: GameState, dt: number): StationDef[] {
     const revealed: StationDef[] = [];
     for (const entry of this.entries.values()) {
-      const solid = SOLID_KINDS.has(entry.def.kind);
-      const next: RevealState = level >= entry.level ? 'active' : level === entry.level - 1 || solid ? 'teased' : 'hidden';
-      if (next !== entry.state) {
-        if (next === 'active' && this.primed && entry.state !== null) {
+      const open = stationOpen(entry.def, state);
+      if (open !== entry.open) {
+        if (open && this.primed && entry.open !== null) {
           entry.age = 0;
           revealed.push(entry.def);
           this.puffs.burst(entry.outer.position, 10, 0.7);
         }
-        this.apply(entry, next);
+        entry.open = open;
+        entry.outer.visible = open;
       }
       entry.age += dt;
       const k = Math.min(1, entry.age / POP_S);
@@ -89,25 +74,5 @@ export class Reveal {
     }
     this.primed = true;
     return revealed;
-  }
-
-  private apply(entry: Entry, state: RevealState): void {
-    entry.state = state;
-    entry.outer.visible = state !== 'hidden';
-    // Prices and counts only once it's open; a teased station shows just its level sign.
-    entry.inner.userData.hideLabels = state !== 'active';
-    entry.sign.el.textContent = state === 'teased' ? t('reveal.sign', { level: entry.level }) : '';
-    entry.inner.traverse((node) => {
-      if (!(node instanceof THREE.Mesh)) return;
-      if (state === 'teased') {
-        if (node.userData.revealMaterial === undefined) node.userData.revealMaterial = node.material;
-        node.material = SILHOUETTE;
-        node.castShadow = false;
-      } else if (node.userData.revealMaterial !== undefined) {
-        node.material = node.userData.revealMaterial;
-        delete node.userData.revealMaterial;
-        node.castShadow = true;
-      }
-    });
   }
 }

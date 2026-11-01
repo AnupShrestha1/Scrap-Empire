@@ -50,7 +50,6 @@ export const en = {
   'stock.detail': '{count} stored · ${price} each',
   'stock.sellSome': 'Sell {n}',
   'stock.sellAll': 'Sell all',
-  'reveal.sign': 'Lv {level}',
   'upgrade.magnet': 'Magnet · Lv {level}',
   'upgradeName.magnet': 'Magnet',
   'pad.sell': 'Sell',

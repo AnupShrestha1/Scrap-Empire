@@ -242,3 +242,30 @@ describe('Auto lines', () => {
     expect(state.lines['line-1']!.product).toBe('sheet');
   });
 });
+
+describe('locked stations', () => {
+  it('are not solid until they open, and opening one moves anyone standing there out of the way', () => {
+    const state = createNewGame(grid, STATIONS);
+    const inside = { x: factory.rect.x + 1.5, y: factory.rect.y + 2.5 };
+    state.player.x = inside.x;
+    state.player.y = inside.y;
+    const sim = new Simulation(state, grid, STATIONS, 'dump');
+    // Level 1: the factory isn't there, so the player can stand where it will be.
+    sim.advance(250);
+    expect(state.player).toMatchObject(inside);
+    // Level 3: it opens, solid, and the player is pushed to the nearest free spot outside it.
+    state.earned = 1e6;
+    sim.advance(250);
+    expect(inRect(factory.rect, state.player.x, state.player.y)).toBe(false);
+  });
+
+  it('keep bins hidden until their metal is unlocked', async () => {
+    const { stationOpen } = await import('../src/sim/effective');
+    const state = createNewGame(grid, STATIONS);
+    const titanium = bins.find((b) => b.item === 'titanium')!;
+    state.earned = 1e6;
+    expect(stationOpen(titanium, state)).toBe(false);
+    state.upgrades.extraction = 3;
+    expect(stationOpen(titanium, state)).toBe(true);
+  });
+});

@@ -1,6 +1,6 @@
 import { SIM, TICK_MS } from '../config';
 import type { ProcessorStatus, SimEvent } from './events';
-import type { Grid } from './grid';
+import { nearestFree, withStations, type Grid } from './grid';
 import type { GameState } from './state';
 import type { ProductId } from '../data/items';
 import type { BayDef, BinDef, DealerDef, DumpDef, FactoryDef, LineDef, OutletDef, ProcessorDef, Rect, StationDef } from './stations';
@@ -10,7 +10,8 @@ import { dropStack, nextRandom, stepField } from './systems/field';
 import { autoAssignLines, setLineProduct, stepLine } from './systems/manufacturing';
 import { newInteractionState, padCharge, stepInteraction, type InteractionState } from './systems/interaction';
 import { stepPlayer } from './systems/player';
-import { processorCycleTicks, shredderFinds, trayCapacity } from './effective';
+import { processorCycleTicks, shredderFinds, stationOpen, trayCapacity } from './effective';
+import { PLAYER } from '../data/player';
 import { businessLevel, PRICES } from '../data/balance';
 import { levelChest } from '../data/unlocks';
 import { stepObjectives } from './systems/objectives';
@@ -25,7 +26,11 @@ import { truckRects } from './vehicles';
  */
 export class Simulation {
   readonly state: GameState;
-  readonly grid: Grid;
+  /** The ground with the open stations' footprints solid; rebuilt as stations open. */
+  grid: Grid;
+  /** The grid with every station, as given; open stations are picked from it. */
+  private readonly fullGrid: Grid;
+  private openKey = '';
   readonly stations: readonly StationDef[];
   /** Player position at the start of the latest tick, for interpolating the sprite between ticks. */
   readonly prevPlayer: Vec2;
@@ -61,6 +66,7 @@ export class Simulation {
   constructor(state: GameState, grid: Grid, stations: readonly StationDef[], dumpId: string) {
     this.state = state;
     this.grid = grid;
+    this.fullGrid = grid;
     this.stations = stations;
     this.prevPlayer = { x: state.player.x, y: state.player.y };
     const dump = stations.find((s): s is DumpDef => s.kind === 'dump' && s.id === dumpId);
@@ -84,6 +90,7 @@ export class Simulation {
     for (const def of this.processorDefs) {
       this.statuses.set(def.id, processorStatus(def, state.processors[def.id]!, processorCycleTicks(def, state)));
     }
+    this.refreshGrid();
   }
 
   /** Sets the movement input (grid direction, length 0..1) that the following ticks use. */
@@ -198,8 +205,32 @@ export class Simulation {
     return out;
   }
 
+  /**
+   * Rebuilds the grid when the set of open stations changes, so locked stations are neither drawn nor
+   * solid, and moves anyone a newly opened station would trap to the nearest free spot.
+   */
+  private refreshGrid(): void {
+    const open = this.stations.filter((s) => stationOpen(s, this.state));
+    const key = open.map((s) => s.id).join(',');
+    if (key === this.openKey) return;
+    this.openKey = key;
+    this.grid = withStations(this.fullGrid, open);
+    this.staffWorld.grid = this.grid;
+    const p = this.state.player;
+    const free = nearestFree(this.grid, p, PLAYER.halfSize);
+    p.x = free.x;
+    p.y = free.y;
+    for (const e of this.state.employees) {
+      const spot = nearestFree(this.grid, e, PLAYER.halfSize);
+      e.x = spot.x;
+      e.y = spot.y;
+      this.brains.delete(e.id);
+    }
+  }
+
   private step(): void {
     const { state, events } = this;
+    this.refreshGrid();
     const firstEvent = events.length;
     const levelBefore = businessLevel(state.earned);
     const p = state.player;

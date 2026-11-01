@@ -4,7 +4,8 @@ import { METALS, type MetalId, type ProductId } from '../data/items';
 import { RECIPES, recipeMetals } from '../data/recipes';
 import { UPGRADE_EFFECTS as FX } from '../data/upgrades';
 import { secondsToTicks, type GameState, type ProcessorState } from './state';
-import type { BinDef, FactoryDef, ProcessorDef } from './stations';
+import type { BinDef, FactoryDef, ProcessorDef, StationDef } from './stations';
+import { stationLevel } from '../data/unlocks';
 
 export function carryCapacity(state: GameState): number {
   return CARRY.capacity + FX.carryPerLevel * state.upgrades.carry;
@@ -22,6 +23,15 @@ export function staffSpeed(state: GameState): number {
 /** How many items each employee carries. */
 export function staffCapacity(state: GameState): number {
   return STAFF.capacity + FX.staffCarryPerLevel * state.upgrades.staffCarry;
+}
+
+/**
+ * Whether a station is open: unlocked by business level (unlocks.ts), and for a bin, its metal unlocked
+ * too. Stations that aren't open aren't drawn, solid or usable.
+ */
+export function stationOpen(def: StationDef, state: GameState): boolean {
+  if (def.kind === 'bin') return metalUnlocked(def.item, state);
+  return businessLevel(state.earned) >= stationLevel(def.id);
 }
 
 /** A processor's hopper space after Shredder capacity upgrades. */

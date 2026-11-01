@@ -554,14 +554,6 @@ body {
   color: #5cc84a;
 }
 
-.label3d.reveal-sign {
-  padding: 2px 8px;
-  border-radius: 8px;
-  background: rgba(19, 36, 58, 0.8);
-  color: #ffd76a;
-  font-size: 12px;
-  text-shadow: none;
-}
 
 /* ------------------------------------------------------------------------------------------------------------
    Scrapyard cartoon theme (the "Scrap Empire cartoon UI" design): ink outlines, paper panels, sticker shadows,
@@ -809,13 +801,6 @@ body {
   text-shadow: 0 3px 0 var(--ink);
 }
 
-.label3d.reveal-sign {
-  background: var(--ink);
-  color: var(--safety);
-  border-radius: 999px;
-  font-family: var(--display);
-  font-weight: 400;
-}
 
 /* Cards: the product chooser and the storage sell card */
 .game-card {

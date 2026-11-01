@@ -77,11 +77,50 @@ export function parseGrid(rows: readonly string[], stations: readonly StationDef
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) solids.push(tileSolids(tileAtXY(x, y)!, x, y, tileAtXY));
   }
-  // Pads, the dump site, bay lanes (trucks are drawn, not solid) and the outlet are walkable.
-  const walkable = new Set(['cashPad', 'dump', 'bay', 'outlet']);
-  for (const s of stations) if (!walkable.has(s.kind)) addRect(solids, width, height, s.rect);
+  return withStations({ width, height, tiles, solids, playerStart }, stations);
+}
 
-  return { width, height, tiles, solids, playerStart };
+/** Pads, the dump site, bay lanes (trucks are drawn, not solid) and the outlet are walkable. */
+const WALKABLE_KINDS: ReadonlySet<string> = new Set(['cashPad', 'dump', 'bay', 'outlet']);
+
+/**
+ * The same ground with these stations' footprints solid (and no others). Stations that aren't unlocked
+ * yet aren't there, so the simulation rebuilds its grid as they open (effective.ts stationOpen).
+ */
+export function withStations(grid: Grid, stations: readonly StationDef[]): Grid {
+  const { width, height, tiles } = grid;
+  const tileAtXY = (x: number, y: number) =>
+    x >= 0 && y >= 0 && x < width && y < height ? (tiles[y * width + x] as TileId) : undefined;
+  const solids: (readonly LocalRect[] | undefined)[] = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) solids.push(tileSolids(tileAtXY(x, y)!, x, y, tileAtXY));
+  }
+  for (const s of stations) if (!WALKABLE_KINDS.has(s.kind)) addRect(solids, width, height, s.rect);
+  return { width, height, tiles, solids, playerStart: grid.playerStart };
+}
+
+/** The nearest spot to `at` where a box of half-size `r` fits, searching outward tile by tile. */
+export function nearestFree(grid: Grid, at: Vec2, r: number): Vec2 {
+  const fits = (x: number, y: number) => !boxHitsSolid(grid, x - r, y - r, x + r, y + r);
+  if (fits(at.x, at.y)) return at;
+  const cx = Math.floor(at.x);
+  const cy = Math.floor(at.y);
+  for (let ring = 1; ring < Math.max(grid.width, grid.height); ring++) {
+    let best: Vec2 | undefined;
+    let bestD = Infinity;
+    for (let y = cy - ring; y <= cy + ring; y++) {
+      for (let x = cx - ring; x <= cx + ring; x++) {
+        if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) !== ring || !fits(x + 0.5, y + 0.5)) continue;
+        const d = Math.hypot(x + 0.5 - at.x, y + 0.5 - at.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { x: x + 0.5, y: y + 0.5 };
+        }
+      }
+    }
+    if (best) return best;
+  }
+  return grid.playerStart;
 }
 
 function tileSolids(

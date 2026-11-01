@@ -272,4 +272,5 @@ Changes made while tuning: business level thresholds lowered (see 7.4), supply 1
 - **Trucks** order any unlocked product, avoiding duplicates, weighted towards what lines make (×3) or what the bins can cover (×2). Lines have **Auto** (on by default): with employees, an idle line switches to what waiting trucks need. Picking a product by hand turns Auto off.
 - **Look:** ingot-shaped metals that shine more the rarer they are, and the scrapyard cartoon UI from the "Scrap Empire cartoon UI" design canvas.
 - **Balance:** with weaker employees the first line still comes at about 4 minutes, but business level 5 moves from about 18 to about 26 minutes in the bot run. Worth tuning (cheaper staff upgrades, or a lower level-5 threshold) after playing.
+- **No silhouettes** (user, 2026-11-01): anything not unlocked is simply absent: not drawn and not solid (the simulation rebuilds its walkable map as stations open, moving anyone in the way). Bins appear when their metal is unlocked. What's next is shown on the HUD and the level-up banner instead.
 

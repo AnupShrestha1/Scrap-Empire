@@ -19,7 +19,6 @@ import { RecipeCard } from '../ui/recipes';
 import { StockCard } from '../ui/stock';
 import { Banner } from '../ui/banner';
 import { Reveal } from './reveal';
-import { businessLevel } from '../data/balance';
 import type { StringKey } from '../i18n';
 import { unlockedMetals } from '../sim/effective';
 import type { MetalId } from '../data/items';
@@ -97,9 +96,9 @@ export class World {
     const dump = sim.stations.find((s) => s.kind === 'dump');
     if (!dump || dump.kind !== 'dump') throw new Error('The yard has no dump site');
     const field = new FieldView(this.scene, models, this.labels, dump, (at) => this.nearestWorker(at), this.dust);
-    this.reveal = new Reveal(this.scene, this.labels, this.smoke);
+    this.reveal = new Reveal(this.scene, this.smoke);
     this.stations = createStationViews(this.scene, models, this.labels, sim.stations, this.smoke, this.reveal);
-    this.reveal.update(businessLevel(sim.state.earned), 0);
+    this.reveal.update(sim.state, 0);
     this.banner = new Banner(uiLayer);
     const hint = new HintArrow(sim.stations, () => ctx.settings.value.hints);
     this.views.push(field, this.staff, ...this.stations.views, hint);
@@ -175,7 +174,7 @@ export class World {
     this.recipeCard.update();
     this.stockCard.update();
     this.announceUnlocks();
-    const revealed = this.reveal.update(businessLevel(state.earned), dt);
+    const revealed = this.reveal.update(state, dt);
     if (revealed.length > 0) {
       // Look at the biggest thing that just opened, for a moment.
       const main = revealed.reduce((a, b) => (b.rect.w * b.rect.h > a.rect.w * a.rect.h ? b : a));
