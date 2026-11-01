@@ -117,12 +117,12 @@ describe('objectives', () => {
     state.objectives.index = OBJECTIVES.findIndex((o) => o.id === 'buyCarry');
     state.upgrades.carry = 1;
     stepObjectives(state, [], []);
-    expect(OBJECTIVES[state.objectives.index]?.id).toBe('shred30');
+    expect(OBJECTIVES[state.objectives.index]?.id).toBe('shred20');
   });
 
   it('count shredded scrap through a real processing cycle', () => {
     const state = createNewGame(grid, STATIONS);
-    state.objectives.index = OBJECTIVES.findIndex((o) => o.id === 'shred30');
+    state.objectives.index = OBJECTIVES.findIndex((o) => o.id === 'shred20');
     const events: SimEvent[] = [{ type: 'processed', station: 'shredder', item: SHREDDER.input }];
     stepObjectives(state, events, []);
     expect(state.objectives.progress).toBe(1);

@@ -1,12 +1,13 @@
-// Gameplay numbers for Milestone 1. First guesses, tuned by playing (see docs/M1_PLAN.md §2).
-import type { ItemId } from './items';
+// Gameplay numbers. First guesses on the ×4 scale of docs/PROGRESSION.md, tuned with the balance bot.
+import { METALS, PRODUCTS, type ItemId, type MetalId } from './items';
+import { RECIPES } from './recipes';
 
 export const SUPPLIER = {
   item: 'scrap' as ItemId,
   /** Scrap per delivery. */
-  load: 8,
+  load: 10,
   /** Seconds between one truck leaving and the next arriving. */
-  intervalS: 20,
+  intervalS: 16,
   /** The first truck of a new game comes quickly. */
   firstDeliveryS: 4,
   driveInS: 3,
@@ -45,50 +46,48 @@ export interface ProcessorRecipe {
   cycleS: number;
   /** Output tray capacity (all items together). */
   tray: number;
-  /** Items produced per input. Fractions accumulate, so 0.3 means exactly 3 per 10 inputs. */
-  outputs: Readonly<Partial<Record<ItemId, number>>>;
 }
 
-/**
- * Testing switch (the user asked for it): every scrap splits equally into iron, aluminium and copper, so all
- * three materials show up from the start. Set to false for the normal mix (copper then comes from Extraction).
- */
-export const EQUAL_SHREDDER_OUTPUTS = true;
-
-const NORMAL_SHREDDER_OUTPUTS = { iron: 1, aluminium: 0.3 };
-const EQUAL_SHARE = 1 / 3;
-const EQUAL_OUTPUTS = { iron: EQUAL_SHARE, aluminium: EQUAL_SHARE, copper: EQUAL_SHARE };
-
-export const SHREDDER: ProcessorRecipe = {
+export const SHREDDER: ProcessorRecipe & {
+  /** The first few scraps of a game shred this fast, so the first metal appears almost at once. */
+  warmCycleS: number;
+  warmCount: number;
+} = {
   input: 'scrap',
   hopper: 10,
   cycleS: 2.5,
   tray: 12,
-  outputs: EQUAL_SHREDDER_OUTPUTS ? EQUAL_OUTPUTS : NORMAL_SHREDDER_OUTPUTS,
+  warmCycleS: 0.8,
+  warmCount: 10,
+};
+
+/**
+ * What each scrap gives (docs/PROGRESSION.md §7.1): always one iron, plus a separate roll for each rarer
+ * metal that's unlocked. Aluminium arrives with business level 2; the rest with Extraction levels, and
+ * every Extraction level past a metal's unlock makes it a little more likely.
+ */
+export interface MetalFind {
+  /** Chance per scrap once unlocked (iron: amount per scrap). */
+  chance: number;
+  /** Added per Extraction level beyond the unlock. */
+  perLevel: number;
+  /** Unlocked by reaching this business level... */
+  businessLevel?: number;
+  /** ...or this Extraction level. */
+  extraction?: number;
+}
+
+export const METAL_FINDS: Readonly<Record<MetalId, MetalFind>> = {
+  iron: { chance: 1, perLevel: 0, businessLevel: 1 },
+  aluminium: { chance: 0.3, perLevel: 0.04, businessLevel: 2 },
+  copper: { chance: 0.15, perLevel: 0.025, extraction: 1 },
+  titanium: { chance: 0.06, perLevel: 0.012, extraction: 3 },
+  gold: { chance: 0.025, perLevel: 0.006, extraction: 5 },
+  platinum: { chance: 0.01, perLevel: 0.0025, extraction: 7 },
 };
 
 export const BINS = {
   capacity: 30,
-};
-
-export interface ManufacturerRecipe {
-  /** Items pulled from the machine's feed bins for one batch. */
-  inputs: Readonly<Partial<Record<ItemId, number>>>;
-  /** Sold the moment it is made. */
-  output: ItemId;
-  batchS: number;
-}
-
-export const PRESS: ManufacturerRecipe = {
-  inputs: { iron: 3 },
-  output: 'sheet',
-  batchS: 4,
-};
-
-export const CAN_LINE: ManufacturerRecipe = {
-  inputs: { aluminium: 2 },
-  output: 'can',
-  batchS: 3,
 };
 
 /** Finished products a factory line holds on its output spot before it pauses. */
@@ -96,8 +95,13 @@ export const LINE_OUTPUT = 8;
 
 /** Employees, hired at the staff hut. */
 export const STAFF = {
-  /** Price of each hire in turn; the length is the most that can be hired. */
-  costs: [150, 250, 400, 600, 850, 1150] as readonly number[],
+  /**
+   * Price of each hire in turn; the length is the most that can be hired. The first is free: an early
+   * objective sends the player to the hut to meet their first employee.
+   */
+  costs: [0, 500, 1000, 1800, 3000, 4500] as readonly number[],
+  /** The hut opens at this business level. */
+  requiresLevel: 2,
   /** Walking speed in tiles per second (a little slower than the player). */
   speed: 3.6,
   /** Items an employee carries. */
@@ -116,25 +120,31 @@ export const ORDERS = {
   patienceS: 90,
   minAmount: 4,
   maxAmount: 8,
+  /** The first truck of a game wants only this many. */
+  firstAmount: 3,
   /** A filled order pays this times the base price. */
   bonus: 1.25,
 };
 
-export const BUILD_COSTS = {
-  press: 120,
-  canLine: 300,
-} as const;
+/** Raw metal at the Scrap Dealer. */
+const METAL_PRICES: Readonly<Record<MetalId, number>> = {
+  iron: 8,
+  aluminium: 20,
+  copper: 36,
+  titanium: 70,
+  gold: 140,
+  platinum: 300,
+};
 
-/** Cash per item when sold from a bin. */
+/** Cash per item: metals at the Scrap Dealer, products at the stall. Scrap isn't sold. */
 export const PRICES: Readonly<Record<ItemId, number>> = {
   scrap: 0,
-  iron: 2,
-  aluminium: 5,
-  /** Sold raw until the wire drawer arrives (M4). */
-  copper: 8,
-  sheet: 9,
-  can: 15,
+  ...METAL_PRICES,
+  ...(Object.fromEntries(PRODUCTS.map((p) => [p, RECIPES[p].price])) as Record<(typeof PRODUCTS)[number], number>),
 };
+
+/** Every metal, in order: what the Scrap Dealer buys. */
+export const RAW_METALS: readonly MetalId[] = METALS;
 
 /** Items sold per second while standing on a sell pad. */
 export const SELL_PER_S = 10;
@@ -143,7 +153,7 @@ export const SELL_PER_S = 10;
  * Lifetime earnings needed for each business level (index 0 is level 1). Levels unlock purchases, so new
  * options arrive at a steady pace instead of all at once.
  */
-export const BUSINESS_LEVELS: readonly number[] = [0, 150, 500, 1500, 4000, 10000];
+export const BUSINESS_LEVELS: readonly number[] = [0, 300, 800, 3000, 10000, 25000, 70000, 180000];
 
 /** Business level (1-based) for lifetime earnings. */
 export function businessLevel(earned: number): number {

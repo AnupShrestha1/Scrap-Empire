@@ -1,17 +1,18 @@
 // A simple player for tuning: plays the real simulation with no graphics and reports when things happen.
 // Walking takes distance / walking speed; at each moment the bot does the most sensible next thing.
 import { businessLevel } from '../src/data/balance';
-import { ITEM_IDS, type ItemId } from '../src/data/items';
+import { isMetal, isProduct, type ItemId, type ProductId } from '../src/data/items';
+import { RECIPES, recipeMetals } from '../src/data/recipes';
 import { STATIONS, TRUCK_ROUTE, YARD } from '../src/data/layout';
 import { PLAYER } from '../src/data/player';
-import { UPGRADE_IDS, UPGRADES, upgradeCost, type UpgradeId } from '../src/data/upgrades';
+import { requiredLevel, UPGRADES, upgradeCost, type UpgradeId } from '../src/data/upgrades';
 import { SIM, TICK_MS } from '../src/config';
-import { binCapacity, carryCapacity } from '../src/sim/effective';
+import { binCapacity, carryCapacity, productUnlocked } from '../src/sim/effective';
 import type { SimEvent } from '../src/sim/events';
 import { parseGrid } from '../src/sim/grid';
 import { Simulation } from '../src/sim/simulation';
 import { createNewGame } from '../src/sim/state';
-import type { BayDef, BinDef, CashPadDef, DumpDef, FactoryDef, OutletDef, ProcessorDef, Rect } from '../src/sim/stations';
+import type { BayDef, BinDef, CashPadDef, DealerDef, DumpDef, FactoryDef, OutletDef, ProcessorDef, Rect } from '../src/sim/stations';
 import { LINE_OUTPUT, STAFF } from '../src/data/balance';
 import type { StaffHutDef } from '../src/sim/stations';
 import { PIECE_KINDS } from '../src/data/scrap';
@@ -34,14 +35,21 @@ const pads = STATIONS.filter((s): s is CashPadDef => s.kind === 'cashPad');
 const bayDefs = STATIONS.filter((s): s is BayDef => s.kind === 'bay');
 const outlet = STATIONS.find((s): s is OutletDef => s.kind === 'outlet')!;
 const hut = STATIONS.find((s): s is StaffHutDef => s.kind === 'staffHut')!;
-const PRODUCTS: readonly ItemId[] = ['sheet', 'can'];
-const METALS: readonly ItemId[] = ['iron', 'aluminium', 'copper'];
+const dealer = STATIONS.find((s): s is DealerDef => s.kind === 'dealer')!;
+
+/** What the bot sets each line to make: the first unlocked product in each list. */
+const LINE_PLANS: readonly (readonly ProductId[])[] = [
+  ['motor', 'sheet'],
+  ['radiator', 'toolbox', 'can'],
+  ['drillBit', 'wire', 'can'],
+  ['circuitBoard', 'watch', 'bikeFrame', 'catalyst'],
+];
 
 const centre = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 
 /** Order the bot buys upgrades in when it can afford several: what moves the economy most first. */
 const UPGRADE_PRIORITY: readonly UpgradeId[] = [
-  'carry', 'magnet', 'shredderSpeed', 'supply', 'binSize', 'pressSpeed', 'shredderYield', 'canSpeed', 'extraction',
+  'carry', 'magnet', 'shredderSpeed', 'supply', 'extraction', 'binSize', 'lineSpeed', 'shredderYield',
 ];
 
 export function runBot(minutes: number): TimelineEntry[] {
@@ -51,6 +59,8 @@ export function runBot(minutes: number): TimelineEntry[] {
   const events: SimEvent[] = [];
   const endTick = minutes * 60 * SIM.tickRate;
   const now = () => s.tick / SIM.tickRate;
+  let firstSale = false;
+  const found = new Set<ItemId>();
 
   const tick = () => {
     sim.advance(TICK_MS);
@@ -61,6 +71,14 @@ export function runBot(minutes: number): TimelineEntry[] {
       if (e.type === 'hired') timeline.push({ seconds: now(), what: `hired employee ${e.count}`, purchase: true });
       if (e.type === 'orderFilled') timeline.push({ seconds: now(), what: `order filled: ${e.item} (+$${e.value})`, purchase: false });
       if (e.type === 'objectiveDone') timeline.push({ seconds: now(), what: `objective ${e.objective} (+$${e.reward})`, purchase: false });
+      if (e.type === 'sold' && !firstSale) {
+        firstSale = true;
+        timeline.push({ seconds: now(), what: `first sale: ${e.item} (+$${e.value})`, purchase: false });
+      }
+      if (e.type === 'found' && !found.has(e.item)) {
+        found.add(e.item);
+        timeline.push({ seconds: now(), what: `first ${e.item} found`, purchase: false });
+      }
     }
   };
 
@@ -91,9 +109,10 @@ export function runBot(minutes: number): TimelineEntry[] {
     if (line && (!line.requiresLevel || businessLevel(s.earned) >= line.requiresLevel)) {
       if (s.money + s.buildPaid[line.id]! >= line.buildCost) return { zone: factory.zones.build, done: () => s.lines[line.id]!.built };
     }
-    // Once a line exists, an employee is worth more than most upgrades.
+    // A free hire as soon as the hut opens; later ones once a line exists.
     const hireCost = STAFF.costs[s.employees.length];
-    if (hireCost !== undefined && s.lines.press?.built && s.money + s.hirePaid >= hireCost) {
+    const hutOpen = businessLevel(s.earned) >= STAFF.requiresLevel;
+    if (hireCost !== undefined && hutOpen && (hireCost === 0 || s.lines['line-1']?.built) && s.money + s.hirePaid >= hireCost) {
       const before = s.employees.length;
       return { zone: hut.zones.hire, done: () => s.employees.length > before };
     }
@@ -101,7 +120,7 @@ export function runBot(minutes: number): TimelineEntry[] {
       const def = UPGRADES[id];
       const level = s.upgrades[id];
       if (level >= def.maxLevel) continue;
-      if (def.requiresLevel && businessLevel(s.earned) < def.requiresLevel) continue;
+      if (businessLevel(s.earned) < requiredLevel(id, level)) continue;
       if (def.requiresLine && !s.lines[def.requiresLine]?.built) continue;
       // Keep saving for the next line while one is affordable soon.
       if (line && line.buildCost < upgradeCost(id, level) * 2 && s.money < line.buildCost) continue;
@@ -113,13 +132,21 @@ export function runBot(minutes: number): TimelineEntry[] {
     return undefined;
   };
 
-  /** Raw metal worth selling now: anything with no line to use it, or a bin getting full. */
-  const binToSell = (): BinDef | undefined =>
-    bins.find((b) => {
-      const count = s.bins[b.id]!.count;
-      const used = factory.lines.some((l) => s.lines[l.id]!.built && l.feeds.includes(b.id));
-      return count >= binCapacity(b, s) * (used ? 0.9 : 0.3);
+  /** Metals some built line uses: worth storing; everything else goes to the Scrap Dealer. */
+  const metalsInUse = (): Set<ItemId> => {
+    const used = new Set<ItemId>();
+    for (const l of factory.lines) if (s.lines[l.id]!.built) for (const m of recipeMetals(s.lines[l.id]!.product)) used.add(m);
+    return used;
+  };
+
+  /** Sets each built line to the best unlocked product in its plan. */
+  const planLines = () => {
+    factory.lines.forEach((l, i) => {
+      if (!s.lines[l.id]!.built) return;
+      const want = LINE_PLANS[i]!.find((p) => productUnlocked(p, s));
+      if (want && s.lines[l.id]!.product !== want) sim.setLineProduct(l.id, want);
     });
+  };
 
   /** A truck waiting for `item`, if any. */
   const truckWanting = (item: ItemId) =>
@@ -129,7 +156,8 @@ export function runBot(minutes: number): TimelineEntry[] {
     });
 
   while (s.tick < endTick) {
-    const product = PRODUCTS.find(carrying);
+    planLines();
+    const product = s.player.stack.find((i) => isProduct(i));
     if (product) {
       const bay = truckWanting(product);
       if (bay) {
@@ -137,29 +165,41 @@ export function runBot(minutes: number): TimelineEntry[] {
         stand(() => !carrying(product) || s.bays[bay.id]!.phase !== 'waiting', 4);
       } else {
         goTo(outlet.zones.sell);
-        stand(() => !PRODUCTS.some(carrying), 8);
+        stand(() => !s.player.stack.some((i) => isProduct(i)), 8);
       }
       continue;
     }
     // Collect products when a truck wants them, or when a line's output is full and it would stall.
     const ready = factory.lines.find((l) => {
-      const out = s.lines[l.id]!.out;
-      return out > 0 && (truckWanting(l.recipe.output) || out >= LINE_OUTPUT);
+      const { out, outItem } = s.lines[l.id]!;
+      return out > 0 && outItem && (truckWanting(outItem) || out >= LINE_OUTPUT || outItem !== s.lines[l.id]!.product);
     });
     if (ready && s.player.stack.length === 0) {
       goTo(ready.output);
       stand(() => s.player.stack.length >= carryCapacity(s) || s.lines[ready.id]!.out === 0, 4);
       continue;
     }
-    const metal = METALS.find(carrying);
+    const metal = s.player.stack.find((i) => isMetal(i));
     if (metal) {
-      const bin = bins.find((b) => b.item === metal)!;
-      if (s.bins[bin.id]!.count >= binCapacity(bin, s)) {
-        goTo(bin.zones.sell);
-        stand(() => s.bins[bin.id]!.count <= binCapacity(bin, s) / 2);
+      const used = metalsInUse();
+      const binOf = (m: ItemId) => bins.find((b) => b.item === m)!;
+      const storable = (m: ItemId) => used.has(m) && s.bins[binOf(m).id]!.count < binCapacity(binOf(m), s);
+      if (storable(metal)) {
+        const bin = binOf(metal);
+        goTo(bin.zones.deposit);
+        stand(() => !carrying(metal) || s.bins[bin.id]!.count >= binCapacity(bin, s), 4);
+      } else {
+        // Everything no line needs, or with a full bin, goes to the Scrap Dealer.
+        goTo(dealer.zones.sell);
+        stand(() => !s.player.stack.some((i) => isMetal(i) && !storable(i)), 8);
       }
-      goTo(bin.zones.deposit);
-      stand(() => !carrying(metal), 4);
+      continue;
+    }
+    // Empty-handed with cash to spend: buy before the next chore (employees keep the tray busy).
+    const purchase = s.player.stack.length === 0 ? nextPurchase() : undefined;
+    if (purchase) {
+      goTo(purchase.zone);
+      stand(purchase.done, 10);
       continue;
     }
     if (carrying('scrap')) {
@@ -174,18 +214,6 @@ export function runBot(minutes: number): TimelineEntry[] {
     if (trayTotal(s.processors[shredder.id]!) > 0) {
       goTo(shredder.zones.output);
       stand(() => s.player.stack.length >= carryCapacity(s) || trayTotal(s.processors[shredder.id]!) === 0, 4);
-      continue;
-    }
-    const purchase = nextPurchase();
-    if (purchase) {
-      goTo(purchase.zone);
-      stand(purchase.done, 10);
-      continue;
-    }
-    const sell = binToSell();
-    if (sell) {
-      goTo(sell.zones.sell);
-      stand(() => s.bins[sell.id]!.count === 0);
       continue;
     }
     if (s.field.pieces.length > 0 && s.processors[shredder.id]!.hopper < shredder.recipe.hopper) {
@@ -211,8 +239,7 @@ export function runBot(minutes: number): TimelineEntry[] {
     }
     stand(() => false, 1);
   }
-  void ITEM_IDS;
-  void UPGRADE_IDS;
+  void RECIPES;
   return timeline;
 }
 

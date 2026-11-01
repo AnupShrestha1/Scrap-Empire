@@ -1,9 +1,10 @@
 // Values after upgrades. Systems and views read these instead of the raw balance numbers.
-import { CARRY, FIELD, SUPPLIER } from '../data/balance';
+import { businessLevel, CARRY, FIELD, METAL_FINDS, SHREDDER, SUPPLIER } from '../data/balance';
+import { METALS, type MetalId, type ProductId } from '../data/items';
+import { RECIPES, recipeMetals } from '../data/recipes';
 import { UPGRADE_EFFECTS as FX } from '../data/upgrades';
-import { secondsToTicks, type GameState } from './state';
-import type { BinDef, LineDef, ProcessorDef } from './stations';
-import type { ItemId } from '../data/items';
+import { secondsToTicks, type GameState, type ProcessorState } from './state';
+import type { BinDef, FactoryDef, ProcessorDef } from './stations';
 
 export function carryCapacity(state: GameState): number {
   return CARRY.capacity + FX.carryPerLevel * state.upgrades.carry;
@@ -17,9 +18,11 @@ export function binCapacity(def: BinDef, state: GameState): number {
   return def.capacity + FX.binPerLevel * state.upgrades.binSize;
 }
 
-export function processorCycleTicks(def: ProcessorDef, state: GameState): number {
+/** Cycle length after the speed upgrade; the first few scraps of a game go faster (a warm start). */
+export function processorCycleTicks(def: ProcessorDef, state: GameState, machine?: ProcessorState): number {
   const level = def.speedUpgrade ? state.upgrades[def.speedUpgrade] : 0;
-  return secondsToTicks(def.recipe.cycleS * FX.shredderCycleFactor ** level);
+  const warm = machine && def.recipe === SHREDDER && machine.shredded < SHREDDER.warmCount;
+  return secondsToTicks((warm ? SHREDDER.warmCycleS : def.recipe.cycleS) * FX.shredderCycleFactor ** level);
 }
 
 export function supplyLoad(state: GameState): number {
@@ -31,19 +34,41 @@ export function supplyIntervalS(state: GameState): number {
   return Math.max(FX.supplyMinIntervalS, SUPPLIER.intervalS - shorter);
 }
 
-/** Output per input after Yield (all outputs) and Extraction (adds copper). */
-export function processorOutputs(def: ProcessorDef, state: GameState): Partial<Record<ItemId, number>> {
-  const scale = 1 + FX.yieldPerLevel * state.upgrades.shredderYield;
-  const out: Partial<Record<ItemId, number>> = {};
-  for (const [item, amount] of Object.entries(def.recipe.outputs) as [ItemId, number][]) out[item] = amount * scale;
-  const extraction = state.upgrades.extraction;
-  if (def.speedUpgrade === 'shredderSpeed' && extraction > 0) {
-    out.copper = (out.copper ?? 0) + (FX.copperBase + FX.copperPerLevel * (extraction - 1)) * scale;
-  }
-  return out;
+/** Whether the shredder can turn up this metal yet (by business level or Extraction level). */
+export function metalUnlocked(metal: MetalId, state: GameState): boolean {
+  const find = METAL_FINDS[metal];
+  if (find.extraction !== undefined) return state.upgrades.extraction >= find.extraction;
+  return businessLevel(state.earned) >= (find.businessLevel ?? 1);
 }
 
-export function lineBatchTicks(line: LineDef, state: GameState): number {
-  const level = line.speedUpgrade ? state.upgrades[line.speedUpgrade] : 0;
-  return secondsToTicks(line.recipe.batchS * FX.lineCycleFactor ** level);
+export function unlockedMetals(state: GameState): MetalId[] {
+  return METALS.filter((m) => metalUnlocked(m, state));
+}
+
+/**
+ * What one scrap gives: `iron` is an amount (fractions carry over between cycles), `chances` the odds of
+ * each rarer metal turning up. Yield raises everything; every Extraction level past a metal's unlock
+ * raises its chance.
+ */
+export function shredderFinds(state: GameState): { iron: number; chances: Partial<Record<MetalId, number>> } {
+  const scale = 1 + FX.yieldPerLevel * state.upgrades.shredderYield;
+  const chances: Partial<Record<MetalId, number>> = {};
+  for (const metal of METALS) {
+    if (metal === 'iron' || !metalUnlocked(metal, state)) continue;
+    const find = METAL_FINDS[metal];
+    const levels = Math.max(0, state.upgrades.extraction - (find.extraction ?? 0));
+    chances[metal] = Math.min(1, (find.chance + find.perLevel * levels) * scale);
+  }
+  return { iron: METAL_FINDS.iron.chance * scale, chances };
+}
+
+/** A product can be made once every metal in its recipe is unlocked. */
+export function productUnlocked(product: ProductId, state: GameState): boolean {
+  return recipeMetals(product).every((m) => metalUnlocked(m, state));
+}
+
+/** Batch time for a product after the factory's line speed upgrade. */
+export function lineBatchTicks(factory: FactoryDef, product: ProductId, state: GameState): number {
+  const level = factory.speedUpgrade ? state.upgrades[factory.speedUpgrade] : 0;
+  return secondsToTicks(RECIPES[product].batchS * FX.lineCycleFactor ** level);
 }

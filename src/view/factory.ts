@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { businessLevel } from '../data/balance';
+import { businessLevel, LINE_OUTPUT } from '../data/balance';
+import { PRODUCTS } from '../data/items';
 import { itemName, t } from '../i18n';
 import type { Simulation } from '../sim/simulation';
 import type { FactoryDef, LineDef } from '../sim/stations';
@@ -28,6 +29,8 @@ interface LineParts {
   lamp: THREE.Mesh;
   ring: RingGauge;
   note: Label;
+  /** What the line is making, over the machine. */
+  name: Label;
   pile: PileProp;
   mixer?: THREE.AnimationMixer;
   action?: THREE.AnimationAction;
@@ -38,10 +41,11 @@ interface LineParts {
 }
 
 /**
- * The factory: an open-topped hall seen over its low front and side walls, with one machine per
- * production line. Unbuilt lines are marked spots on the floor; a bought line pops in with a puff.
- * Working machines move (the press stamps, the can line's robot arm swings), with a status lamp and a
- * progress ring over each, and finished products stack on pallets in the hatches of the bay-side wall.
+ * The factory: an open-topped hall seen over its low front and side walls, with one machine per line
+ * slot. Unbuilt slots are numbered spots on the floor; a bought line pops in with a puff. Working
+ * machines move (stamping pistons on odd slots, swinging robot arms on even ones), with a status lamp, a
+ * progress ring and the product's name over each, and finished products stack on pallets in the hatches
+ * of the bay-side wall.
  */
 export class FactoryView implements View {
   private readonly title: Label;
@@ -66,7 +70,7 @@ export class FactoryView implements View {
       const z = line.output.y + line.output.h / 2;
       const spot = new THREE.Vector3(x + w / 2 + 0.2, 0.12, z);
       const machine = new THREE.Group();
-      machine.add(fitToFootprint(models.get('pressMachine'), 1.5));
+      machine.add(fitToFootprint(models.get('pressMachine'), 1.3));
       machine.rotation.y = -Math.PI / 2;
       machine.position.copy(spot);
       const parts: Partial<LineParts> = {};
@@ -83,8 +87,8 @@ export class FactoryView implements View {
         }
       } else {
         // The can line: a robot arm beside the machine.
-        const arm = fitToFootprint(models.get('robotArm'), 0.9);
-        arm.position.set(0, 0, 1.1);
+        const arm = fitToFootprint(models.get('robotArm'), 0.8);
+        arm.position.set(0, 0, 0.95);
         machine.add(arm);
         parts.arm = arm.getObjectByName('element-b') ?? arm;
       }
@@ -96,11 +100,13 @@ export class FactoryView implements View {
       ring.root.position.set(spot.x, 2.6, z);
       const note = labels.add('note');
       note.at.set(spot.x, 2.3, z);
+      const name = labels.add('line-name');
+      name.at.set(spot.x, 1.75, z);
       // Half inside the wall, like a hatch, so the worker collecting from the spot doesn't stand in it.
-      const pile = new PileProp([line.recipe.output], 12);
+      const pile = new PileProp(PRODUCTS, LINE_OUTPUT);
       pile.root.position.copy(centre(line.output)).setX(line.output.x - 0.15);
       scene.add(machine, ghost, l, ring.root, pile.root);
-      this.lines.push({ def: line, machine, ghost, lamp: l, ring, note, pile, builtAge: Infinity, wasBuilt: false, ...parts });
+      this.lines.push({ def: line, machine, ghost, lamp: l, ring, note, name, pile, builtAge: Infinity, wasBuilt: false, ...parts });
     });
 
     this.buildPad = new PadProp(def.zones.build.w, def.zones.build.h, '⚒', 0x3a7bd5).placeOn(def.zones.build).root;
@@ -117,7 +123,7 @@ export class FactoryView implements View {
     for (const parts of this.lines) {
       const line = parts.def;
       const st = state.lines[line.id]!;
-      const status = lineStatus(line, st, binDefs, state.bins);
+      const status = lineStatus(st, binDefs, state.bins);
       // Lines built before the game started just stand there; new ones pop in with a puff.
       if (st.built && !parts.wasBuilt && this.primed) {
         parts.builtAge = 0;
@@ -142,12 +148,23 @@ export class FactoryView implements View {
 
       parts.lamp.visible = st.built;
       if (status !== 'unbuilt') (parts.lamp.material as THREE.MeshBasicMaterial).color.setHex(LAMP_COLORS[status]);
-      parts.ring.set(working ? (st.progress + sim.alpha) / batchTicks(line, state) : undefined);
+      parts.ring.set(working ? (st.progress + sim.alpha) / batchTicks(this.def, st, state) : undefined);
       parts.ring.face(camera);
       parts.pile.root.visible = st.built;
-      parts.pile.show({ [line.recipe.output]: st.out });
-      const missing = status === 'starved' ? missingInput(line, binDefs, state.bins) : undefined;
-      setText(parts.note, status === 'blocked' ? t('station.outputFull') : missing ? t('station.needs', { item: itemName(missing) }) : '');
+      parts.pile.show(st.outItem ? { [st.outItem]: st.out } : {});
+      setText(parts.name, st.built ? itemName(st.product) : '');
+      const missing = status === 'starved' ? missingInput(st.product, binDefs, state.bins) : undefined;
+      const old = st.out > 0 && st.outItem && st.outItem !== st.product ? st.outItem : undefined;
+      setText(
+        parts.note,
+        old
+          ? t('station.collect', { item: itemName(old) })
+          : status === 'blocked'
+            ? t('station.outputFull')
+            : missing
+              ? t('station.needs', { item: itemName(missing) })
+              : '',
+      );
     }
 
     this.primed = true;
@@ -160,7 +177,7 @@ export class FactoryView implements View {
     const locked = next.requiresLevel !== undefined && businessLevel(state.earned) < next.requiresLevel;
     padTitle(
       this.buildLabel,
-      t('build.line', { n: this.def.lines.indexOf(next) + 1, name: t(next.name) }),
+      t('build.line', { n: this.def.lines.indexOf(next) + 1 }),
       locked ? t('locked.level', { level: next.requiresLevel! }) : `$${next.buildCost - (state.buildPaid[next.id] ?? 0)}`,
       locked,
     );

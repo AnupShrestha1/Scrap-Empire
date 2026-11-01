@@ -1,6 +1,6 @@
 # Scrap Empire — Progression Design
 
-Draft for review, 2026-11-01. Design only; nothing here is implemented yet.
+Approved 2026-11-01. P1 is built; P2 is next.
 
 **Goal:** a new CrazyGames player is hooked within the first minute and has seen every core system (collect, process, sell, upgrade, automate, manufacture, deliver) within about six minutes. After that, the game keeps a steady drip of new things to want.
 
@@ -113,6 +113,8 @@ Each level is an event:
 
 ### 4.4 Materials arrive one at a time
 
+Superseded in detail by section 7 (six metals, Extraction levels, products).
+
 - Iron only at the start.
 - Aluminium arrives at level 2, as the first thing that unlocks.
 - Copper arrives at level 4, via Extraction.
@@ -155,8 +157,8 @@ The objective chain is rewritten around the beats in section 3. Each objective p
 
 Small enough to take in two steps, each checked with the balance runner against the targets in section 3:
 
-- **P1 — Hook (first 5 minutes):** Scrap Dealer, iron-first materials, warm shredder, bigger numbers, rewritten early objectives, free first employee, scripted first truck, coin juice.
-- **P2 — Reveal and milestones:** hidden, teased and active states, unlock moments (camera pan, fence drop), level chests and banners, "Next unlock" HUD, rotating goals.
+- **P1 — Hook and economy (built 2026-11-01):** Scrap Dealer, the six metals and Extraction (section 7), line slots with recipe pads and the twelve products, six bins, business levels 1–8, warm shredder, bigger numbers, rewritten early objectives, free first employee, scripted first truck.
+- **P2 — Reveal and milestones:** hidden, teased and active states, unlock moments (camera pan, fence drop), level chests and banners, "Next unlock" HUD, rotating goals. (Coin juice is already in from R2.)
 
 Offline earnings come after, as already planned.
 
@@ -169,9 +171,86 @@ Offline earnings come after, as already planned.
 5. **Bigger numbers:** scale prices and costs about ×4?
 6. **Scripted first truck** the moment the Press makes its first sheets?
 
-## 7. Materials and recipes (user direction, 2026-11-01; to design in detail before P1)
+## 7. Metals and recipes (user direction, 2026-11-01)
 
-- **Iron only at first.** The shredder gives only iron until upgrades unlock more metals.
-- **Rarer metals are worth more.** Each new metal has a lower chance per scrap but a higher price. Upgrading Extraction raises the chance of the valuable ones.
-- **Single-metal lines:** 3 iron → 1 sheet; aluminium → 1 can (amount to set).
-- **Mixed recipes:** combining metals makes higher-value products, e.g. 2 iron + 1 aluminium → a product worth more than either. More such combinations follow.
+Six metals, each rarer and more valuable than the last, and products made from any mix of them. Prices are on the ×4 scale of 4.6. All numbers are first drafts for the balance bot to tune.
+
+### 7.1 Metals
+
+Every scrap gives **1 iron**. On top of that, each unlocked metal has a chance of turning up in the same scrap, rolled separately. Iron is the bread and butter; the rare finds are the excitement.
+
+| Metal | Sells for | Unlocks | Chance per scrap when unlocked | Each later Extraction level |
+|---|---|---|---|---|
+| Iron | $8 | Start | always (1 per scrap) | — |
+| Aluminium | $20 | Business Lv 2 | 30% | +4% |
+| Copper | $36 | Extraction Lv 1 (needs business Lv 3) | 15% | +2.5% |
+| Titanium | $70 | Extraction Lv 3 (needs Lv 5) | 6% | +1.2% |
+| Gold | $140 | Extraction Lv 5 (needs Lv 6) | 2.5% | +0.6% |
+| Platinum | $300 | Extraction Lv 7 (needs Lv 7) | 1% | +0.25% |
+
+- **Extraction** goes to level 8. Levels 1, 3, 5 and 7 each unlock the next metal; *every* level also raises the chance of all the rare metals already unlocked. That's the "upgrade Extraction to find more valuable metal" loop.
+- **What a scrap is worth** (selling raw): $8 with iron only, about $14 once aluminium is in, about $30 with everything unlocked at base chances. Each new metal adds a similar slice, so every unlock feels like a raise.
+- A rare find shows off: the bar pops out of the shredder with a sparkle and a "Gold!" toast the first few times.
+- Shredder Yield stays as it is: +10% of everything per level.
+
+### 7.2 Products
+
+Each product is a recipe of 2–4 metals. Products sell for about 1.6× what their metals would sell for raw, so manufacturing always beats selling raw. A product becomes available once all its metals are unlocked.
+
+| Tier | Product | Recipe | Metals worth | Sells for | Batch |
+|---|---|---|---|---|---|
+| I | Metal sheet | 3 iron | $24 | $40 | 4 s |
+| I | Can | 2 aluminium | $40 | $65 | 3 s |
+| I | Toolbox | 2 iron + 1 aluminium | $36 | $60 | 4 s |
+| II | Copper wire | 2 copper | $72 | $115 | 4 s |
+| II | Motor | 2 iron + 1 copper | $52 | $90 | 5 s |
+| II | Radiator | 2 aluminium + 1 copper | $76 | $125 | 5 s |
+| III | Drill bit | 2 iron + 1 titanium | $86 | $140 | 6 s |
+| III | Bike frame | 2 aluminium + 1 titanium | $110 | $180 | 6 s |
+| IV | Circuit board | 2 copper + 1 gold | $212 | $340 | 7 s |
+| IV | Watch | 1 titanium + 1 gold | $210 | $350 | 7 s |
+| V | Catalytic converter | 2 iron + 1 copper + 1 platinum | $352 | $560 | 8 s |
+| V | Jet engine | 2 titanium + 1 copper + 1 platinum | $476 | $780 | 9 s |
+
+More recipes are just data, so the list can grow later.
+
+**Where products sell.** The prices above are what the **stall** (the outlet) pays, any time, one at a time. A **buyer truck** pays **×1.25** for the products it ordered, so filling orders is the better deal and the stall is the fallback for spare stock. (The ×1.25 truck bonus already exists in the game today; it stays.)
+
+### 7.3 Lines and recipes
+
+Twelve products don't fit one line each, so the factory gets **line slots** and each line makes whatever you choose:
+
+- The factory starts with 1 line (bought at business Lv 3, as in the beat plan) and grows to **4 lines** (bought on the build pad, at Lv 3, 4, 5 and 6).
+- One **recipe pad** behind the factory (off every walking route, 2 s stand-still like every pad) opens a recipe card: each line with the unlocked products, their recipes and prices; tap one and that line switches over. A batch in progress is cancelled and its metals go back to the bins; products of the old recipe on the line's spot must be collected first.
+- A line pulls its recipe's metals straight from the bins, as today. If a metal is missing it shows "Needs Copper".
+- Buyer trucks order products that one of your lines is currently set to make, so orders always make sense.
+- One Line speed upgrade speeds every line (one pad instead of four, behind the factory with the recipe pad).
+
+### 7.4 Yard changes this needs
+
+- **Six bins**, one per metal, in a 2 × 3 block between the shredder and the factory. Each appears (from a teased silhouette) when its metal unlocks. With the Scrap Dealer buying raw metal (4.2), bins no longer need sell pads, so they pack tighter.
+- **Business levels 1–8** instead of 1–6. Thresholds after the first balance runs: $0, $300, $800, $3,000, $10,000, $25,000, $70,000, $180,000.
+
+### 7.5 Decisions for you
+
+1. **Line slots with a recipe pad** (any line makes any unlocked product), instead of one dedicated line per product?
+2. **Random finds** (each scrap rolls for rare metals, with a sparkle on a find) instead of smooth fractional amounts?
+3. **The metal and product numbers** above as the starting point for balancing?
+4. **Six bins in a block** between the shredder and the factory, appearing as metals unlock?
+
+### 7.6 First balance run (P1 as built)
+
+From `npm run balance` (a bot that plays well but not perfectly):
+
+| Moment | Target | Bot |
+|---|---|---|
+| First sale | ≤ 0:30 | 0:18 |
+| First upgrade | ≤ 0:45 | 0:26 |
+| Business level 2 (aluminium, staff hut) | ~1:30 | 2:06 |
+| First employee (free) | ≤ 3:00 | 2:15 |
+| First factory line | ≤ 4:30 | 3:42 |
+| First truck order filled | ≤ 6:00 | 7:14 |
+| Copper (Extraction 1) | ~8:00 | 16:28 |
+
+Changes made while tuning: business level thresholds lowered (see 7.4), supply 10 scrap every 16 s, the staff hut opens at business level 2, and "store metal" moved after the first line (bins have no use before it). The bot spends on cheap upgrades before Extraction and line 2, so those come later than a player chasing objectives would get them; worth checking by playing.
+

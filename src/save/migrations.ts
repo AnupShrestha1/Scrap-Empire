@@ -1,5 +1,7 @@
+import { ITEM_IDS } from '../data/items';
+
 /** Current save format. Bump it, and add a migration, whenever GameState changes shape. */
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 export type Migration = (state: unknown) => unknown;
 
@@ -92,6 +94,46 @@ export const MIGRATIONS: Migrations = {
   },
   /** v9 → v10 (M3b): employees. */
   9: (state) => ({ ...(state as Json), employees: [], hirePaid: 0 }),
+  /**
+   * v10 → v11 (P1): six metals and twelve products; factory line slots that make a chosen product (the
+   * press and can line become lines 1 and 2); one line speed upgrade; a new objective chain; the shredder's
+   * warm start and the first-truck flag. Item counts for new items are filled in as zero.
+   */
+  10: (state) => {
+    const s = state as Json;
+    const zeroItems = Object.fromEntries(ITEM_IDS.map((id) => [id, 0]));
+    const processors: Json = {};
+    for (const [id, p] of Object.entries((s.processors as Json) ?? {})) {
+      const m = p as Json;
+      processors[id] = { ...m, tray: { ...zeroItems, ...(m.tray as Json) }, carry: { ...zeroItems, ...(m.carry as Json) }, shredded: 999 };
+    }
+    const old = (s.lines as Record<string, Json | undefined>) ?? {};
+    const slot = (l: Json | undefined, product: string) => ({
+      built: Boolean(l?.built),
+      product,
+      progress: 0,
+      out: Number(l?.out) || 0,
+      outItem: Number(l?.out) > 0 ? product : null,
+    });
+    const lines = { 'line-1': slot(old.press, 'sheet'), 'line-2': slot(old['can-line'], 'can') };
+    const speed = (u: unknown) => {
+      const { pressSpeed, canSpeed, ...rest } = (u as Json) ?? {};
+      return { ...rest, lineSpeed: Math.max(Number(pressSpeed) || 0, Number(canSpeed) || 0) };
+    };
+    const upgradePaid = { ...speed(s.upgradePaid), lineSpeed: 0 };
+    // The objective chain was rewritten: experienced saves pick it up at the factory steps.
+    const objectives = { index: Number((s.objectives as Json)?.index) >= 8 ? 10 : 0, progress: 0 };
+    return {
+      ...s,
+      processors,
+      lines,
+      buildPaid: {},
+      upgrades: speed(s.upgrades),
+      upgradePaid,
+      objectives,
+      firstOrder: lines['line-1'].built || lines['line-2'].built,
+    };
+  },
 };
 
 /** Runs every migration from `from` up to `to`. Throws if one is missing. */

@@ -2,14 +2,15 @@ import { SIM, TICK_MS } from '../config';
 import type { ProcessorStatus, SimEvent } from './events';
 import type { Grid } from './grid';
 import type { GameState } from './state';
+import type { ProductId } from '../data/items';
 import type { BayDef, BinDef, DumpDef, FactoryDef, LineDef, ProcessorDef, Rect, StationDef } from './stations';
 import { stepBay } from './systems/bays';
 import { stepStaff, type Brain, type StaffWorld } from './systems/staff';
-import { dropStack, stepField } from './systems/field';
-import { stepLine } from './systems/manufacturing';
+import { dropStack, nextRandom, stepField } from './systems/field';
+import { setLineProduct, stepLine } from './systems/manufacturing';
 import { newInteractionState, padCharge, stepInteraction, type InteractionState } from './systems/interaction';
 import { stepPlayer } from './systems/player';
-import { processorCycleTicks, processorOutputs } from './effective';
+import { processorCycleTicks, shredderFinds } from './effective';
 import { businessLevel } from '../data/balance';
 import { stepObjectives } from './systems/objectives';
 import { processorStatus, stepProcessor } from './systems/processing';
@@ -35,6 +36,8 @@ export class Simulation {
   timeScale = 1;
 
   private readonly move: Vec2 = { x: 0, y: 0 };
+  /** The shared random stream (saved with the field), for rare metal finds. */
+  private readonly roll = (): number => nextRandom(this.state.field);
   private accumulator = 0;
   /** Set by requestDrop; applied at the start of the next tick. */
   private dropRequested = false;
@@ -115,6 +118,22 @@ export class Simulation {
     return this.accumulator / TICK_MS;
   }
 
+  /** The zone the player is standing in ("stationId:zone"), if any. */
+  get zone(): string | null {
+    return this.interaction.zoneKey;
+  }
+
+  /** Sets what a factory line makes (from the recipe card). Returns true if it changed. */
+  setLineProduct(lineId: string, product: ProductId): boolean {
+    for (const factory of this.factories) {
+      if (setLineProduct(factory, lineId, product, this.binDefs, this.state)) {
+        this.dirty = true;
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** A factory production line by id. */
   factoryLine(id: string): LineDef | undefined {
     for (const factory of this.factories) {
@@ -150,8 +169,8 @@ export class Simulation {
     changed = stepSupplier(state, this.dump, events) || changed;
     for (const def of this.processorDefs) {
       const machine = state.processors[def.id]!;
-      const cycle = processorCycleTicks(def, state);
-      changed = stepProcessor(def, machine, cycle, events, processorOutputs(def, state)) || changed;
+      const cycle = processorCycleTicks(def, state, machine);
+      changed = stepProcessor(def, machine, cycle, events, shredderFinds(state), this.roll) || changed;
       const status = processorStatus(def, machine, cycle);
       if (status !== this.statuses.get(def.id)) {
         this.statuses.set(def.id, status);
@@ -160,7 +179,7 @@ export class Simulation {
     }
     for (const factory of this.factories) {
       for (const line of factory.lines) {
-        changed = stepLine(line, state.lines[line.id]!, this.binDefs, state, events) || changed;
+        changed = stepLine(factory, line, state.lines[line.id]!, this.binDefs, state, events) || changed;
       }
     }
     changed = stepStaff(state, this.staffWorld, this.brains, events) || changed;

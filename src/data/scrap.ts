@@ -1,7 +1,7 @@
 // The kinds of scrap lying around the dump site. Small pieces are 1 scrap; big ones are worth 3 and fill
 // 3 slots of the player's stack, so there's a choice about what to grab.
 
-import type { ItemId } from './items';
+import { ITEM_IDS, type ItemId } from './items';
 
 export interface PieceKind {
   id: string;
@@ -26,6 +26,10 @@ export const PIECE_KINDS: readonly PieceKind[] = [
   { id: 'dropped-copper', units: 1, item: 'copper' },
   { id: 'dropped-sheet', units: 1, item: 'sheet' },
   { id: 'dropped-can', units: 1, item: 'can' },
+  // Added with the six metals and twelve products; appended so older saves' piece kinds keep their index.
+  ...ITEM_IDS.filter((item) => item !== 'scrap' && !['iron', 'aluminium', 'copper', 'sheet', 'can'].includes(item)).map(
+    (item): PieceKind => ({ id: `dropped-${item}`, units: 1, item }),
+  ),
 ];
 
 /** What a piece gives when picked up. */

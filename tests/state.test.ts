@@ -17,7 +17,7 @@ describe('isGameState', () => {
     ['NaN position', { tick: 0, player: { x: NaN, y: 1, facing: 'up' } }],
     ['string position', { tick: 0, player: { x: '1', y: 1, facing: 'up' } }],
     ['bad facing', { tick: 0, player: { x: 1, y: 1, facing: 'north' } }],
-    ['unknown carried item', { ...createNewGame(grid, []), player: { x: 1, y: 1, facing: 'up', stack: ['gold'] } }],
+    ['unknown carried item', { ...createNewGame(grid, []), player: { x: 1, y: 1, facing: 'up', stack: ['unobtainium'] } }],
     ['bad truck phase', { ...createNewGame(grid, []), truck: { phase: 'flying', timer: 0, load: 0 } }],
   ])('rejects %s', (_label, value) => {
     expect(isGameState(value)).toBe(false);

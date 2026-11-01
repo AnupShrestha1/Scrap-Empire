@@ -13,7 +13,10 @@ import { PLAYER_PLACE } from '../sim/events';
 import { centre, type View } from './common';
 import { Flyers, Puffs, type Target } from './fx';
 import { RingGauge } from './props';
-import { createStationViews, HintArrow, StaffView, type StationViews } from './stations';
+import { createStationViews, HintArrow, lineName, StaffView, type StationViews } from './stations';
+import { RecipeCard } from '../ui/recipes';
+import { unlockedMetals } from '../sim/effective';
+import type { MetalId } from '../data/items';
 
 /** Pick-ups closer together than this keep a combo going. */
 const COMBO_WINDOW_MS = 700;
@@ -35,6 +38,13 @@ export class World {
   private readonly dust = new Puffs(0xd9c29a);
   private readonly smoke = new Puffs(0xcfd3da);
   private readonly flyers = new Flyers(ITEM_IDS);
+  /** Golden sparkle where a rare metal turns up. */
+  private readonly sparkle = new Puffs(0xffe27a, 60);
+  private readonly recipeCard: RecipeCard;
+  /** Metals the shredder can find; a new one gets a toast. */
+  private unlocked: Set<MetalId>;
+  /** Finds announced so far this session, per metal (common ones only for the first few). */
+  private readonly finds = new Map<string, number>();
   private dustWait = 0;
   private readonly simEvents: SimEvent[] = [];
   /** Cash earned per station this frame, shown as one floating "+$" each. */
@@ -75,7 +85,9 @@ export class World {
     this.stations = createStationViews(this.scene, models, this.labels, sim.stations, this.smoke);
     const hint = new HintArrow(sim.stations, () => ctx.settings.value.hints);
     this.views.push(field, this.staff, ...this.stations.views, hint);
-    this.scene.add(this.player.root, this.charge.root, hint.root, this.dust.root, this.smoke.root, this.flyers.root);
+    this.scene.add(this.player.root, this.charge.root, hint.root, this.dust.root, this.smoke.root, this.flyers.root, this.sparkle.root);
+    this.recipeCard = new RecipeCard(uiLayer, sim, () => ctx.sfx.play('upgrade'));
+    this.unlocked = new Set(unlockedMetals(sim.state));
 
     window.addEventListener('resize', () => this.resize());
     parent.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -134,7 +146,10 @@ export class World {
     for (const view of this.views) view.update(sim, dt, time, this.camera);
     this.dust.update(dt);
     this.smoke.update(dt);
+    this.sparkle.update(dt);
     this.flyers.update(dt);
+    this.recipeCard.update();
+    this.announceUnlocks();
     // Over the head, facing the camera.
     this.charge.set(sim.padCharge);
     this.charge.root.position.set(px, 2.2, py);
@@ -175,6 +190,16 @@ export class World {
     this.renderer.setSize(this.width, this.height);
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
+  }
+
+  /** A toast for each metal the shredder has just become able to find. */
+  private announceUnlocks(): void {
+    const now = unlockedMetals(this.ctx.sim.state);
+    for (const metal of now) {
+      if (this.unlocked.has(metal)) continue;
+      this.unlocked.add(metal);
+      this.ctx.toasts.show(t('toast.metalUnlocked', { item: itemName(metal) }), 'good');
+    }
   }
 
   /** Little puffs at the player's feet while running. */
@@ -256,6 +281,22 @@ export class World {
       case 'dropped':
         sfx.play('drop');
         break;
+      case 'found': {
+        // A rare find sparkles over the tray; the first few of each common metal, and every titanium,
+        // gold or platinum, get a toast.
+        const shredder = this.stations.shredders.get(event.station);
+        if (shredder) this.sparkle.burst(shredder.outputPoint, 6, 0.3);
+        const seen = (this.finds.get(event.item) ?? 0) + 1;
+        this.finds.set(event.item, seen);
+        const rare = event.item === 'titanium' || event.item === 'gold' || event.item === 'platinum';
+        if (rare || seen <= 2) toasts.show(t('toast.found', { item: itemName(event.item) }), rare ? 'good' : 'info');
+        if (rare) sfx.play('objective');
+        break;
+      }
+      case 'recipesOpen':
+        this.recipeCard.show(event.station);
+        sfx.play('pickup');
+        break;
       case 'processed': {
         sfx.play('chunk');
         const shredder = this.stations.shredders.get(event.station);
@@ -292,7 +333,7 @@ export class World {
         break;
       case 'built': {
         const line = sim.factoryLine(event.station);
-        if (line) toasts.show(t('toast.built', { name: t(line.name) }), 'good');
+        if (line) toasts.show(t('toast.built', { name: lineName(sim, line.id) }), 'good');
         sfx.play('upgrade');
         break;
       }
@@ -300,7 +341,7 @@ export class World {
         if (event.level) toasts.show(t('toast.locked', { level: event.level }), 'warn');
         else if (event.line) {
           const line = sim.factoryLine(event.line);
-          toasts.show(t('locked.line', { name: line ? t(line.name) : event.line }), 'warn');
+          toasts.show(t('locked.line', { name: line ? lineName(sim, line.id) : event.line }), 'warn');
         }
         sfx.play('warn');
         break;
@@ -343,7 +384,7 @@ export class World {
   private showSale(station: string, value: number): void {
     const def = this.ctx.sim.stations.find((s) => s.id === station);
     if (!def) return;
-    const at = def.kind === 'bin' ? def.zones.sell : def.rect;
+    const at = def.kind === 'dealer' ? def.zones.sell : def.rect;
     this.labels.floating(`+$${value}`, centre(at, 1.4));
     this.labels.coinBurst(centre(at, 0.5), this.camera, this.width, this.height, value);
   }

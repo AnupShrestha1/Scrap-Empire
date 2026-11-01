@@ -8,10 +8,10 @@ import { createNewGame, secondsToTicks, type GameState } from '../src/sim/state'
 import type { DumpDef, ProcessorDef, StationDef } from '../src/sim/stations';
 import { dropStack, fieldUnits, stepField } from '../src/sim/systems/field';
 import { newInteractionState, stepInteraction } from '../src/sim/systems/interaction';
-import { processorStatus, stepProcessor, trayTotal } from '../src/sim/systems/processing';
+import { processorStatus, stepProcessor, trayTotal, type Finds } from '../src/sim/systems/processing';
 import { stepSupplier } from '../src/sim/systems/supplier';
 
-// A tiny yard: a 3×3 dump site with its drop pad below, a shredder, and an iron bin with a sell pad.
+// A tiny yard: a 3×3 dump site with its drop pad below, a shredder, an iron bin and a Scrap Dealer.
 const DUMP: DumpDef = {
   id: 'dump',
   kind: 'dump',
@@ -35,8 +35,9 @@ const STATIONS: StationDef[] = [
     item: 'iron',
     capacity: 3,
     rect: { x: 7, y: 0, w: 1, h: 1 },
-    zones: { deposit: { x: 7, y: 1, w: 1, h: 1 }, sell: { x: 6, y: 0, w: 1, h: 1 } },
+    zones: { deposit: { x: 7, y: 1, w: 1, h: 1 } },
   },
+  { id: 'dealer', kind: 'dealer', rect: { x: 8, y: 3, w: 1, h: 1 }, zones: { sell: { x: 6, y: 0, w: 1, h: 1 } } },
 ];
 const grid = parseGrid(['.........', '.........', '.........', 'P........'], STATIONS);
 const DT = 0.05;
@@ -174,13 +175,15 @@ describe('carrying', () => {
   });
 });
 
-describe('selling', () => {
-  it('sells a bin empty for cash, one item at a time, after a stand-still', () => {
+describe('the Scrap Dealer', () => {
+  it('buys carried metal one item at a time after a stand-still, and nothing else', () => {
     const state = emptyGame();
-    state.bins.bin!.count = 3;
-    const events = standIn(state, 6, 60, [], 0);
-    expect(state.bins.bin!.count).toBe(0);
-    expect(state.money).toBe(3 * PRICES.iron);
+    state.player.stack = ['iron', 'scrap', 'iron', 'sheet', 'gold'];
+    standIn(state, 6, secondsToTicks(PURCHASE.delayS) - 1, [], 0);
+    expect(state.player.stack).toHaveLength(5);
+    const events = standIn(state, 6, 80, [], 0);
+    expect(state.player.stack).toEqual(['scrap', 'sheet']);
+    expect(state.money).toBe(2 * PRICES.iron + PRICES.gold);
     expect(events.filter((e) => e.type === 'sold')).toHaveLength(3);
   });
 });
@@ -202,31 +205,48 @@ describe('getting unstuck', () => {
     expect(state.player.stack).toHaveLength(CARRY.capacity);
   });
 
-  it('can always empty hands full of metal, even with the bin full, by selling first', () => {
+  it('can always empty hands full of metal, even with the bin full, at the Scrap Dealer', () => {
     const state = emptyGame();
     state.player.stack = Array(CARRY.capacity).fill('iron');
     state.bins.bin!.count = 3;
     standIn(state, 7, 40);
     expect(state.player.stack).toHaveLength(CARRY.capacity);
-    standIn(state, 6, 60, [], 0);
-    standIn(state, 7, 40);
-    expect(state.player.stack.length).toBeLessThan(CARRY.capacity);
+    standIn(state, 6, 80, [], 0);
+    expect(state.player.stack).toEqual([]);
   });
 });
 
 describe('processing', () => {
-  it('turns scrap into exactly the recipe outputs, over time', () => {
+  const cycle = secondsToTicks(SHREDDER.cycleS);
+  const run = (machine: GameState['processors'][string], ticks: number, finds: Finds, roll: () => number, events: SimEvent[] = []) => {
+    for (let i = 0; i < ticks; i++) stepProcessor(SHRED, machine, cycle, events, finds, roll);
+    return events;
+  };
+
+  it('gives one iron per scrap, plus a rarer metal whenever its roll comes up', () => {
+    const state = emptyGame();
+    const machine = state.processors.shredder!;
+    machine.hopper = 6;
+    const rolls = [0.1, 0.9];
+    let n = 0;
+    const events = run(machine, 6 * cycle + 20, { iron: 1, chances: { aluminium: 0.3 } }, () => rolls[n++ % 2]!);
+    expect(machine.tray.iron).toBe(6);
+    expect(machine.tray.aluminium).toBe(3);
+    expect(events.filter((e) => e.type === 'found')).toHaveLength(3);
+    expect(machine.shredded).toBe(6);
+  });
+
+  it('keeps fractions of iron between scraps (Yield), so totals are exact', () => {
     const state = emptyGame();
     const machine = state.processors.shredder!;
     machine.hopper = 10;
     let iron = 0;
-    for (let i = 0; i < 10 * secondsToTicks(SHREDDER.cycleS) + 20; i++) {
-      stepProcessor(SHRED, machine);
+    for (let i = 0; i < 10 * cycle + 20; i++) {
+      stepProcessor(SHRED, machine, cycle, [], { iron: 1.2, chances: {} }, () => 1);
       iron += machine.tray.iron;
       machine.tray.iron = 0;
     }
-    expect(iron).toBe(Math.floor(10 * SHREDDER.outputs.iron! + 1e-9));
-    expect(machine.tray.aluminium).toBe(Math.floor(10 * SHREDDER.outputs.aluminium! + 1e-9));
+    expect(iron).toBe(12);
   });
 
   it('blocks with a full tray and resumes once it is emptied', () => {
@@ -234,12 +254,11 @@ describe('processing', () => {
     const machine = state.processors.shredder!;
     machine.tray.iron = SHREDDER.tray;
     machine.hopper = 1;
-    // Enough iron carried over that this scrap finishes a whole one, whatever the recipe's share.
-    machine.carry.iron = 1 - SHREDDER.outputs.iron! + 0.01;
-    for (let i = 0; i < secondsToTicks(SHREDDER.cycleS) + 5; i++) stepProcessor(SHRED, machine);
-    expect(processorStatus(SHRED, machine)).toBe('blocked');
+    const finds = { iron: 1, chances: {} };
+    run(machine, cycle + 5, finds, () => 1);
+    expect(processorStatus(SHRED, machine, cycle)).toBe('blocked');
     machine.tray.iron = 0;
-    stepProcessor(SHRED, machine);
+    run(machine, 1, finds, () => 1);
     expect(machine.tray.iron).toBe(1);
     expect(trayTotal(machine)).toBe(1);
   });

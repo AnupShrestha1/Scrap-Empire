@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STAFF } from '../src/data/balance';
+import { BUSINESS_LEVELS, STAFF } from '../src/data/balance';
 import { STATIONS, YARD } from '../src/data/layout';
 import { PURCHASE } from '../src/data/upgrades';
 import { memoryStorage } from '../src/platform/memoryStorage';
@@ -56,11 +56,25 @@ describe('hiring', () => {
     for (let i = 0; i < ticks; i++) stepInteraction(state, STATIONS, inter, []);
   }
 
-  it('costs more for each hire, takes nothing until affordable and stops at the cap', () => {
+  it('opens at business level 2, and gives the first employee free after the stand-still', () => {
     const state = createNewGame(grid, STATIONS);
+    standOnHire(state, secondsToTicks(5));
+    expect(state.employees).toHaveLength(0);
+    state.earned = BUSINESS_LEVELS[STAFF.requiresLevel - 1]!;
+    standOnHire(state, secondsToTicks(PURCHASE.delayS) - 1);
+    expect(state.employees).toHaveLength(0);
+    standOnHire(state, secondsToTicks(PURCHASE.delayS) + 2);
+    expect(state.employees).toHaveLength(1);
+    expect(state.money).toBe(0);
+  });
+
+  it('costs more for each later hire, takes nothing until affordable and stops at the cap', () => {
+    const state = createNewGame(grid, STATIONS);
+    state.earned = BUSINESS_LEVELS[STAFF.requiresLevel - 1]!;
+    state.employees.push({ id: 0, x: 10.5, y: 12.5, facing: 'down', stack: [] });
     state.money = 100;
     standOnHire(state, secondsToTicks(6));
-    expect(state.employees).toHaveLength(0);
+    expect(state.employees).toHaveLength(1);
     expect(state.hirePaid).toBe(0);
     expect(state.money).toBe(100);
 
@@ -73,6 +87,7 @@ describe('hiring', () => {
 
   it('waits for the stand-still like every pad that spends', () => {
     const state = createNewGame(grid, STATIONS);
+    state.earned = BUSINESS_LEVELS[STAFF.requiresLevel - 1]!;
     state.money = 1000;
     standOnHire(state, secondsToTicks(PURCHASE.delayS) - 1);
     expect(state.money).toBe(1000);
@@ -105,13 +120,12 @@ describe('employees', () => {
   it('load a waiting truck from the factory line, and the order pays', () => {
     const state = createNewGame(grid, STATIONS);
     state.field.pieces = [];
-    state.lines.press!.built = true;
-    state.lines.press!.out = 6;
+    Object.assign(state.lines['line-1']!, { built: true, out: 6, outItem: 'sheet' });
     Object.assign(state.bays['bay-a']!, { phase: 'waiting', timer: secondsToTicks(200), item: 'sheet', want: 4, have: 0 });
     addEmployee(state, 38.5, 16.5);
     run(simWith(state), 30);
     expect(state.money).toBeGreaterThan(0);
-    expect(state.lines.press!.out).toBeLessThanOrEqual(2);
+    expect(state.lines['line-1']!.out).toBeLessThanOrEqual(2);
   });
 
   it('never chase the same piece', () => {

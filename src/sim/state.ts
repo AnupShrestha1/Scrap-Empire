@@ -1,6 +1,6 @@
 import { FIELD, SUPPLIER } from '../data/balance';
 import { PIECE_KINDS } from '../data/scrap';
-import { emptyItemCounts, isItemId, ITEM_IDS, type ItemId } from '../data/items';
+import { emptyItemCounts, isItemId, isProduct, ITEM_IDS, type ItemId, type ProductId } from '../data/items';
 import { PLAYER } from '../data/player';
 import { SIM } from '../config';
 import { emptyUpgradeCounts, UPGRADE_IDS, type UpgradeId } from '../data/upgrades';
@@ -53,6 +53,8 @@ export interface ProcessorState {
   tray: Record<ItemId, number>;
   /** Fractional output carried over between cycles, so yields are exact over time. */
   carry: Record<ItemId, number>;
+  /** Inputs processed so far; the first few go faster (a warm start). */
+  shredded: number;
 }
 
 export interface BinState {
@@ -61,10 +63,14 @@ export interface BinState {
 
 export interface LineState {
   built: boolean;
+  /** What the line makes (chosen on the factory's recipe pad). */
+  product: ProductId;
   /** Ticks into the current batch; 0 when not working. */
   progress: number;
-  /** Finished products waiting on the line's output spot. */
+  /** Finished products waiting on the line's output spot... */
   out: number;
+  /** ...and what they are (they may be from an earlier recipe). */
+  outItem: ProductId | null;
 }
 
 export type BayPhase = 'empty' | 'arriving' | 'waiting' | 'leaving';
@@ -127,6 +133,8 @@ export interface GameState {
   employees: Employee[];
   /** Cash already paid towards the next hire. */
   hirePaid: number;
+  /** Set once the first buyer truck has been sent (it comes the moment the first product is made). */
+  firstOrder: boolean;
 }
 
 export function secondsToTicks(seconds: number): number {
@@ -134,7 +142,7 @@ export function secondsToTicks(seconds: number): number {
 }
 
 export function newProcessorState(): ProcessorState {
-  return { hopper: 0, progress: 0, tray: emptyItemCounts(), carry: emptyItemCounts() };
+  return { hopper: 0, progress: 0, tray: emptyItemCounts(), carry: emptyItemCounts(), shredded: 0 };
 }
 
 export function createNewGame(grid: Grid, stations: readonly StationDef[]): GameState {
@@ -155,6 +163,7 @@ export function createNewGame(grid: Grid, stations: readonly StationDef[]): Game
     bays: {},
     employees: [],
     hirePaid: 0,
+    firstOrder: false,
   };
   return sanitizeState(state, grid, stations);
 }
@@ -181,6 +190,7 @@ export function isGameState(value: unknown): value is GameState {
     isCount(truck.load) &&
     isField(value.field) &&
     isCount(value.hirePaid) &&
+    typeof value.firstOrder === 'boolean' &&
     Array.isArray(value.employees) &&
     value.employees.every(
       (e: unknown) =>
@@ -193,7 +203,15 @@ export function isGameState(value: unknown): value is GameState {
         e.stack.every(isItemId),
     ) &&
     isMapOf(value.bins, (b) => isCount(b.count)) &&
-    isMapOf(value.lines, (l) => typeof l.built === 'boolean' && isCount(l.progress) && isCount(l.out)) &&
+    isMapOf(
+      value.lines,
+      (l) =>
+        typeof l.built === 'boolean' &&
+        isProductId(l.product) &&
+        isCount(l.progress) &&
+        isCount(l.out) &&
+        (l.outItem === null || isProductId(l.outItem)),
+    ) &&
     isMapOf(
       value.bays,
       (b) =>
@@ -207,7 +225,7 @@ export function isGameState(value: unknown): value is GameState {
     Object.values(value.buildPaid).every(isCount) &&
     isMapOf(
       value.processors,
-      (m) => isCount(m.hopper) && isCount(m.progress) && isItemCounts(m.tray) && isItemCounts(m.carry, true),
+      (m) => isCount(m.hopper) && isCount(m.progress) && isCount(m.shredded) && isItemCounts(m.tray) && isItemCounts(m.carry, true),
     )
   );
 }
@@ -246,13 +264,14 @@ export function sanitizeState(state: GameState, grid: Grid, stations: readonly S
       case 'cashPad':
       case 'outlet':
       case 'staffHut':
+      case 'dealer':
         break;
       case 'bay':
         bays[s.id] = state.bays[s.id] ?? { phase: 'empty', timer: 1, item: null, want: 0, have: 0 };
         break;
       case 'factory':
         for (const line of s.lines) {
-          lines[line.id] = state.lines[line.id] ?? { built: false, progress: 0, out: 0 };
+          lines[line.id] = state.lines[line.id] ?? { built: false, product: 'sheet', progress: 0, out: 0, outItem: null };
           buildPaid[line.id] = state.buildPaid[line.id] ?? 0;
         }
         break;
@@ -285,6 +304,10 @@ function isField(value: unknown): boolean {
       (p.kind as number) < PIECE_KINDS.length &&
       (p.locked === undefined || typeof p.locked === 'boolean'),
   );
+}
+
+function isProductId(value: unknown): boolean {
+  return isItemId(value) && isProduct(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

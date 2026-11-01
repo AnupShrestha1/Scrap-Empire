@@ -5,13 +5,27 @@ import { secondsToTicks, type BayState, type GameState } from '../state';
 import type { BayDef, FactoryDef } from '../stations';
 import { nextRandom } from './field';
 
-/** Products the factory can currently make: what buyer trucks may order. */
+/** What the factory's built lines are set to make: what buyer trucks may order. */
 export function orderableItems(factories: readonly FactoryDef[], state: GameState): ItemId[] {
-  const items: ItemId[] = [];
+  const items = new Set<ItemId>();
   for (const f of factories) {
-    for (const line of f.lines) if (state.lines[line.id]?.built) items.push(line.recipe.output);
+    for (const line of f.lines) {
+      const st = state.lines[line.id];
+      if (st?.built) items.add(st.product);
+    }
   }
-  return items;
+  return [...items];
+}
+
+/** The first product made in a game, if one is waiting on a line: the first truck comes for it at once. */
+function firstProduct(factories: readonly FactoryDef[], state: GameState): ItemId | undefined {
+  for (const f of factories) {
+    for (const line of f.lines) {
+      const st = state.lines[line.id];
+      if (st?.built && st.out > 0 && st.outItem) return st.outItem;
+    }
+  }
+  return undefined;
 }
 
 /** What a filled order pays: base price plus the order bonus. */
@@ -27,6 +41,19 @@ export function orderValue(bay: BayState): number {
 export function stepBay(def: BayDef, bay: BayState, state: GameState, factories: readonly FactoryDef[], events: SimEvent[]): boolean {
   switch (bay.phase) {
     case 'empty': {
+      // The very first product brings a truck straight away, wanting just a few: the bay explains itself.
+      const first = state.firstOrder ? undefined : firstProduct(factories, state);
+      if (first) {
+        state.firstOrder = true;
+        bay.phase = 'arriving';
+        bay.timer = secondsToTicks(ORDERS.driveInS);
+        bay.item = first;
+        bay.want = ORDERS.firstAmount;
+        bay.have = 0;
+        return true;
+      }
+      // Until then, no trucks: the first one comes for the first product.
+      if (!state.firstOrder) return false;
       const items = orderableItems(factories, state);
       if (items.length === 0) return false;
       if (--bay.timer > 0) return false;

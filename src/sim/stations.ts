@@ -1,5 +1,5 @@
-import type { ManufacturerRecipe, ProcessorRecipe } from '../data/balance';
-import type { ItemId } from '../data/items';
+import type { ProcessorRecipe } from '../data/balance';
+import type { MetalId } from '../data/items';
 import type { UpgradeId } from '../data/upgrades';
 
 /** A rectangle of tiles: covers [x, x + w) × [y, y + h). */
@@ -34,39 +34,46 @@ export interface ProcessorDef extends StationBase {
   zones: { input: Rect; output: Rect };
 }
 
+/**
+ * Storage for one metal. Standing in a deposit zone puts carried metal into whichever of the bins around
+ * you takes it; production lines draw from the bins directly. Metal is sold at the Scrap Dealer.
+ */
 export interface BinDef extends StationBase {
   kind: 'bin';
-  item: ItemId;
+  item: MetalId;
   capacity: number;
-  /** `deposit` takes matching items from the player; `sell` sells the bin's contents, so it can always be emptied. */
-  zones: { deposit: Rect; sell: Rect };
+  zones: { deposit: Rect };
 }
 
-/** One production line inside the factory. Lines are bought in order on the factory's build pad. */
+/**
+ * One line slot in the factory. Slots are bought in order on the factory's build pad; each built line
+ * makes whichever product it's set to (on the factory's recipe pad), pulling metals from the bins.
+ */
 export interface LineDef {
   id: string;
-  /** i18n key for its name. */
-  name: 'machine.press' | 'machine.canLine';
-  recipe: ManufacturerRecipe;
-  /** Bins it pulls inputs from directly (storage is the hub; nobody carries inputs to it). */
-  feeds: readonly string[];
   buildCost: number;
   /** Business level needed before it can be bought. */
   requiresLevel?: number;
-  /** The upgrade that speeds this line up. */
-  speedUpgrade?: UpgradeId;
   /** Where its products come out, to be picked up. */
   output: Rect;
 }
 
 /**
- * The factory: one building holding production lines. Each built line pulls straight from its feed bins
- * and sells what it makes at once.
+ * The factory: one building with line slots. `build` sells the next slot; standing on `recipes` opens
+ * the card for choosing what each line makes.
  */
 export interface FactoryDef extends StationBase {
   kind: 'factory';
   lines: readonly LineDef[];
-  zones: { build: Rect };
+  /** The upgrade that speeds every line up. */
+  speedUpgrade?: UpgradeId;
+  zones: { build: Rect; recipes: Rect };
+}
+
+/** The Scrap Dealer: buys every raw metal the player carries. */
+export interface DealerDef extends StationBase {
+  kind: 'dealer';
+  zones: { sell: Rect };
 }
 
 /** A loading bay lane: buyer trucks back in to `lane.parkX` on `lane.row`; load them from `zones.load`. */
@@ -95,14 +102,16 @@ export interface CashPadDef extends StationBase {
   zones: { buy: Rect };
 }
 
-export type StationDef = DumpDef | ProcessorDef | BinDef | CashPadDef | FactoryDef | BayDef | OutletDef | StaffHutDef;
+export type StationDef = DumpDef | ProcessorDef | BinDef | CashPadDef | FactoryDef | BayDef | OutletDef | StaffHutDef | DealerDef;
 
 export type ZoneHit =
   | { station: DumpDef; zone: 'return' }
   | { station: ProcessorDef; zone: 'input' | 'output' }
-  | { station: BinDef; zone: 'deposit' | 'sell' }
+  | { station: BinDef; zone: 'deposit' }
   | { station: CashPadDef; zone: 'buy' }
   | { station: FactoryDef; zone: 'build' }
+  | { station: FactoryDef; zone: 'recipes' }
+  | { station: DealerDef; zone: 'sell' }
   | { station: FactoryDef; zone: 'lineOutput'; line: LineDef }
   | { station: BayDef; zone: 'load' }
   | { station: OutletDef; zone: 'sell' }
@@ -126,13 +135,13 @@ export function zoneAt(stations: readonly StationDef[], x: number, y: number): Z
         break;
       case 'bin':
         if (inRect(s.zones.deposit, x, y)) return { station: s, zone: 'deposit' };
-        if (inRect(s.zones.sell, x, y)) return { station: s, zone: 'sell' };
         break;
       case 'cashPad':
         if (inRect(s.zones.buy, x, y)) return { station: s, zone: 'buy' };
         break;
       case 'factory':
         if (inRect(s.zones.build, x, y)) return { station: s, zone: 'build' };
+        if (inRect(s.zones.recipes, x, y)) return { station: s, zone: 'recipes' };
         for (const line of s.lines) if (inRect(line.output, x, y)) return { station: s, zone: 'lineOutput', line };
         break;
       case 'bay':
@@ -143,6 +152,9 @@ export function zoneAt(stations: readonly StationDef[], x: number, y: number): Z
         break;
       case 'staffHut':
         if (inRect(s.zones.hire, x, y)) return { station: s, zone: 'hire' };
+        break;
+      case 'dealer':
+        if (inRect(s.zones.sell, x, y)) return { station: s, zone: 'sell' };
         break;
     }
   }

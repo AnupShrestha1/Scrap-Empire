@@ -1,5 +1,5 @@
-// The yard. Grid x runs down-right on screen and y down-left, so the chain (gate → dump site → shredder
-// → bins → factory → loading bay → east gate) reads from the top-left of the screen towards the bottom-right.
+// The yard, seen from the south: grid x runs east (screen right) and y south (towards the camera), so the
+// chain (gate → dump site → shredder → bins → factory → loading bay → east gate) reads left to right.
 //
 // Ground:  .  dirt      :  concrete   =  road      g  grass     ~  water (solid)   d  dump ground
 // Solid:   #  fence     T  tree       L  lamp post B  guard booth   x  crate
@@ -14,7 +14,8 @@
 
 import type { StationDef } from '../sim/stations';
 import type { UpgradeId } from './upgrades';
-import { BINS, BUILD_COSTS, CAN_LINE, FIELD, PRESS, SHREDDER } from './balance';
+import type { MetalId } from './items';
+import { BINS, FIELD, SHREDDER } from './balance';
 
 export const YARD: readonly string[] = [
   'gTggggggTgTTgTTTTggggTggTgTgTTggggggTTTgTTgTggTggTTggTgg',
@@ -24,16 +25,16 @@ export const YARD: readonly string[] = [
   'gg#................................................#gggg',
   'Tg#............................L...................#gggg',
   'Tg#.dddddddddddddd.....................::::::::::::#gggg',
-  'Tg#.dddddddddddddd........::::.........::::::::::::#gTTT',
-  'Tg#.dddddddddddddd........::::.........::::::::::::=====',
-  'gg#.dddddddddddddd.::::::.::::.........::::::::::::=====',
-  'gB#.dddddddddddddd.::::::.::::.........::::::::::::=====',
-  'gg#.dddddddddddddd.::::::.::::.........::::::::::::=====',
-  '====dddddddddddddd.::::::.::::.........::::::::::::=====',
-  '====dddddddddddddd.::::::.::::.........::::::::::::=====',
-  'gg#.dddddddddddddd.::::::.::::.........::::::::::::=====',
-  'Tg#.dddddddddddddd.::::::.::::.........::::::::::::#ggTT',
-  'gg#.dddddddddddddd........::::.........::::::::::::#gggg',
+  'Tg#.dddddddddddddd........:::::::......::::::::::::#gTTT',
+  'Tg#.dddddddddddddd........:::::::......::::::::::::=====',
+  'gg#.dddddddddddddd.::::::.:::::::......::::::::::::=====',
+  'gB#.dddddddddddddd.::::::.:::::::......::::::::::::=====',
+  'gg#.dddddddddddddd.::::::.:::::::......::::::::::::=====',
+  '====dddddddddddddd.::::::.:::::::......::::::::::::=====',
+  '====dddddddddddddd.::::::.:::::::......::::::::::::=====',
+  'gg#.dddddddddddddd.::::::.:::::::......::::::::::::=====',
+  'Tg#.dddddddddddddd.::::::.:::::::......::::::::::::#ggTT',
+  'gg#.dddddddddddddd........:::::::......::::::::::::#gggg',
   'Tg#.dddddddddddddd.L......::::.........::::::::::::#ggTg',
   'Tg#.dddddddddddddd........::::.........::::::::::::#gTgT',
   'gg#.dddddddddddddd........::::.....................#gTTg',
@@ -47,6 +48,14 @@ export const YARD: readonly string[] = [
   'Tggggggggggggggggggg~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
   '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
   '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+];
+
+/** Price and business level of each factory line slot, in buying order. */
+const LINE_SLOTS: readonly { buildCost: number; requiresLevel: number }[] = [
+  { buildCost: 300, requiresLevel: 3 },
+  { buildCost: 1200, requiresLevel: 4 },
+  { buildCost: 4000, requiresLevel: 5 },
+  { buildCost: 12000, requiresLevel: 6 },
 ];
 
 /**
@@ -72,60 +81,26 @@ export const STATIONS: readonly StationDef[] = [
     speedUpgrade: 'shredderSpeed',
     zones: { input: { x: 21, y: 13, w: 2, h: 1 }, output: { x: 23, y: 11, w: 1, h: 2 } },
   },
-  // Bins: drop off from the shredder side (x 26) and one end; sell from the other end, a dead end.
-  {
-    id: 'bin-iron',
-    kind: 'bin',
-    item: 'iron',
-    rect: { x: 27, y: 8, w: 2, h: 2 },
-    capacity: BINS.capacity,
-    zones: { deposit: { x: 26, y: 8, w: 3, h: 3 }, sell: { x: 27, y: 7, w: 2, h: 1 } },
-  },
-  {
-    id: 'bin-aluminium',
-    kind: 'bin',
-    item: 'aluminium',
-    rect: { x: 27, y: 12, w: 2, h: 2 },
-    capacity: BINS.capacity,
-    zones: { deposit: { x: 26, y: 12, w: 3, h: 3 }, sell: { x: 27, y: 11, w: 2, h: 1 } },
-  },
-  {
-    id: 'bin-copper',
-    kind: 'bin',
-    item: 'copper',
-    rect: { x: 27, y: 16, w: 2, h: 2 },
-    capacity: BINS.capacity,
-    zones: { deposit: { x: 26, y: 16, w: 3, h: 3 }, sell: { x: 27, y: 15, w: 2, h: 1 } },
-  },
-  // The factory: one building whose production lines pull straight from the bins and sell what they
-  // make at once. Lines are bought, in order, on the build pad in front.
+  // Storage: one bin per metal in a 2 × 3 block, common metals on the left. Carry metal into the gaps
+  // beside a bin and it goes in; the walkways between rows are free. Metal is sold at the Scrap Dealer.
+  bin('bin-iron', 'iron', 27, 8),
+  bin('bin-aluminium', 'aluminium', 27, 11),
+  bin('bin-copper', 'copper', 27, 14),
+  bin('bin-titanium', 'titanium', 30, 8),
+  bin('bin-gold', 'gold', 30, 11),
+  bin('bin-platinum', 'platinum', 30, 14),
+  // The Scrap Dealer buys raw metal, south of the bins: a dead end off the route to the factory.
+  { id: 'dealer', kind: 'dealer', rect: { x: 28, y: 18, w: 3, h: 1 }, zones: { sell: { x: 28, y: 17, w: 3, h: 1 } } },
+  // The factory: four line slots, each making whatever it's set to; products come out on the bay side.
   {
     id: 'factory',
     kind: 'factory',
-    rect: { x: 33, y: 9, w: 4, h: 6 },
-    lines: [
-      {
-        id: 'press',
-        name: 'machine.press',
-        recipe: PRESS,
-        feeds: ['bin-iron'],
-        buildCost: BUILD_COSTS.press,
-        speedUpgrade: 'pressSpeed',
-        // Products come out on the factory's bay side.
-        output: { x: 37, y: 9, w: 1, h: 2 },
-      },
-      {
-        id: 'can-line',
-        name: 'machine.canLine',
-        recipe: CAN_LINE,
-        feeds: ['bin-aluminium'],
-        buildCost: BUILD_COSTS.canLine,
-        requiresLevel: 2,
-        speedUpgrade: 'canSpeed',
-        output: { x: 37, y: 12, w: 1, h: 2 },
-      },
-    ],
-    zones: { build: { x: 34, y: 15, w: 2, h: 1 } },
+    rect: { x: 34, y: 8, w: 4, h: 8 },
+    speedUpgrade: 'lineSpeed',
+    lines: LINE_SLOTS.map((slot, i) => ({ id: `line-${i + 1}`, ...slot, output: { x: 38, y: 8 + i * 2, w: 1, h: 1 } })),
+    // The build pad (buy the next line) in front; the recipe pad (choose what each line makes) behind,
+    // a dead end beside the line speed pad.
+    zones: { build: { x: 36, y: 16, w: 2, h: 1 }, recipes: { x: 37, y: 6, w: 1, h: 1 } },
   },
   // Upgrade pads, each near what it improves and off the walking routes.
   cashPad('pad-supply', 'supply', 7, 23),
@@ -134,10 +109,9 @@ export const STATIONS: readonly StationDef[] = [
   cashPad('pad-shredder', 'shredderSpeed', 21, 9),
   cashPad('pad-yield', 'shredderYield', 23, 9),
   cashPad('pad-extraction', 'extraction', 25, 9),
-  cashPad('pad-bins', 'binSize', 30, 20),
-  // Line speed pads behind the factory, a dead end.
-  cashPad('pad-press-speed', 'pressSpeed', 34, 8),
-  cashPad('pad-can-speed', 'canSpeed', 35, 8),
+  cashPad('pad-bins', 'binSize', 32, 20),
+  // Line speed behind the factory, a dead end.
+  cashPad('pad-line-speed', 'lineSpeed', 35, 6),
   // The loading bay: buyer trucks back in along two lanes from the east gate. Load them from the zone at
   // their tail; products can also be sold outright at the outlet, a dead end south of the lanes.
   {
@@ -158,6 +132,11 @@ export const STATIONS: readonly StationDef[] = [
   { id: 'staff-hut', kind: 'staffHut', rect: { x: 16, y: 21, w: 2, h: 2 }, zones: { hire: { x: 16, y: 23, w: 2, h: 1 } } },
   { id: 'outlet', kind: 'outlet', rect: { x: 44, y: 17, w: 2, h: 1 }, zones: { sell: { x: 44, y: 17, w: 2, h: 1 } } },
 ];
+
+/** A 2 × 2 bin; metal goes in from the tiles either side of it. */
+function bin(id: string, item: MetalId, x: number, y: number): StationDef {
+  return { id, kind: 'bin', item, rect: { x, y, w: 2, h: 2 }, capacity: BINS.capacity, zones: { deposit: { x: x - 1, y, w: 4, h: 2 } } };
+}
 
 function cashPad(id: string, upgrade: UpgradeId, x: number, y: number): StationDef {
   const rect = { x, y, w: 1, h: 1 };

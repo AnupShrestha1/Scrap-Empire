@@ -26,14 +26,27 @@ export const COLORS = {
   lampGlow: 0xfff1b0,
 } as const;
 
-/** Each item's colour: the stripe on its bin, and the colour of the item itself. */
+/** Each item's colour: the rim of its bin, and the colour of the item itself. */
 export const ITEM_COLORS: Readonly<Record<ItemId, number>> = {
   scrap: 0x9c8672,
   iron: 0x7f8ea3,
   aluminium: 0xdde4ec,
   copper: 0xe08a45,
+  titanium: 0x8f9cc4,
+  gold: 0xf2c230,
+  platinum: 0xbfeaf2,
   sheet: 0x9fb3cc,
   can: 0xe2534b,
+  toolbox: 0xd8443a,
+  wire: 0xd9772e,
+  motor: 0x5a6a85,
+  radiator: 0xc4ccd6,
+  drillBit: 0x7d8aab,
+  bikeFrame: 0x3fae5a,
+  circuitBoard: 0x2e9e4f,
+  watch: 0xe6b422,
+  catalyst: 0xaeb6c2,
+  jetEngine: 0x4b5468,
 };
 
 const materials = new Map<number, THREE.MeshStandardMaterial>();
@@ -57,25 +70,41 @@ function mesh(geo: THREE.BufferGeometry, color: number): THREE.Mesh {
 
 // ---------------------------------------------------------------------------------------------- items
 
+const bar = (long: number) => new THREE.BoxGeometry(long, 0.14, 0.24);
+const lying = (geo: THREE.BufferGeometry) => geo.rotateZ(Math.PI / 2);
+
+/** Every item's shape: metals as bars (rarer ones smaller), products each recognisable at a glance. */
 const ITEM_GEOMETRY: Readonly<Record<ItemId, THREE.BufferGeometry>> = {
   // A crushed bale of scrap metal.
   scrap: new THREE.BoxGeometry(0.34, 0.24, 0.3),
-  iron: new THREE.BoxGeometry(0.42, 0.14, 0.24),
-  aluminium: new THREE.BoxGeometry(0.42, 0.14, 0.24),
-  copper: new THREE.BoxGeometry(0.42, 0.14, 0.24),
+  iron: bar(0.42),
+  aluminium: bar(0.42),
+  copper: bar(0.4),
+  titanium: bar(0.38),
+  gold: bar(0.32),
+  platinum: bar(0.3),
   sheet: new THREE.BoxGeometry(0.46, 0.06, 0.34),
   can: new THREE.CylinderGeometry(0.11, 0.11, 0.24, 10),
+  toolbox: new THREE.BoxGeometry(0.42, 0.22, 0.22),
+  wire: new THREE.TorusGeometry(0.14, 0.06, 6, 14).rotateX(Math.PI / 2),
+  motor: lying(new THREE.CylinderGeometry(0.13, 0.13, 0.36, 10)),
+  radiator: new THREE.BoxGeometry(0.42, 0.24, 0.1),
+  drillBit: new THREE.ConeGeometry(0.1, 0.34, 8),
+  bikeFrame: new THREE.TorusGeometry(0.17, 0.03, 4, 3).rotateX(Math.PI / 2),
+  circuitBoard: new THREE.BoxGeometry(0.4, 0.04, 0.28),
+  watch: new THREE.CylinderGeometry(0.12, 0.12, 0.06, 12),
+  catalyst: new THREE.BoxGeometry(0.4, 0.18, 0.24),
+  jetEngine: lying(new THREE.CylinderGeometry(0.15, 0.12, 0.42, 10)),
 };
 
 /** How tall one item is when stacked. */
-export const ITEM_HEIGHT: Readonly<Record<ItemId, number>> = {
-  scrap: 0.26,
-  iron: 0.14,
-  aluminium: 0.14,
-  copper: 0.14,
-  sheet: 0.07,
-  can: 0.24,
-};
+export const ITEM_HEIGHT: Readonly<Record<ItemId, number>> = Object.fromEntries(
+  Object.entries(ITEM_GEOMETRY).map(([id, geo]) => {
+    geo.computeBoundingBox();
+    const box = geo.boundingBox!;
+    return [id, box.max.y - box.min.y];
+  }),
+) as Record<ItemId, number>;
 
 export function itemGeometry(item: ItemId): THREE.BufferGeometry {
   return ITEM_GEOMETRY[item];
@@ -160,6 +189,8 @@ export function lampPost(): THREE.Object3D {
 export class BinProp {
   readonly root = new THREE.Group();
   private readonly bars: THREE.InstancedMesh;
+  private readonly rim: THREE.Mesh;
+  private readonly rimColor: number;
   private shown = -1;
 
   constructor(item: ItemId, private readonly slots = 30) {
@@ -178,12 +209,19 @@ export class BinProp {
     const walls = [new THREE.BoxGeometry(size, 0.1, size).translate(0, 0.05, 0)];
     for (const [x, z, w, d] of sides(t, 0)) walls.push(new THREE.BoxGeometry(w, h, d).translate(x, h / 2, z));
     const rims = sides(t + 0.04, 0.04).map(([x, z, w, d]) => new THREE.BoxGeometry(w, 0.1, d).translate(x, h + 0.05, z));
-    this.root.add(mesh(mergeGeometries(walls)!, COLORS.binWall), mesh(mergeGeometries(rims)!, ITEM_COLORS[item]));
+    this.rim = mesh(mergeGeometries(rims)!, ITEM_COLORS[item]);
+    this.rimColor = ITEM_COLORS[item];
+    this.root.add(mesh(mergeGeometries(walls)!, COLORS.binWall), this.rim);
     this.bars = new THREE.InstancedMesh(ITEM_GEOMETRY[item], mat(ITEM_COLORS[item]), slots);
     this.bars.castShadow = true;
     this.bars.receiveShadow = true;
     this.root.add(this.bars);
     this.fill(0);
+  }
+
+  /** Locked bins (their metal isn't found yet) have a plain grey rim. */
+  setLocked(locked: boolean): void {
+    this.rim.material = mat(locked ? 0x8a8fa3 : this.rimColor);
   }
 
   fill(count: number): void {

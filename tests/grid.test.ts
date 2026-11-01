@@ -23,7 +23,7 @@ describe('parseGrid', () => {
     expect(() => parseGrid(['~P?'])).toThrow(/Unknown layout character/);
     expect(() => parseGrid(['~.~'])).toThrow(/player start/);
     expect(() =>
-      parseGrid(['.P.'], [{ id: 'b', kind: 'bin', item: 'iron', capacity: 1, rect: { x: 2, y: 0, w: 2, h: 1 }, zones: { deposit: { x: 0, y: 0, w: 1, h: 1 }, sell: { x: 1, y: 0, w: 1, h: 1 } } }]),
+      parseGrid(['.P.'], [{ id: 'b', kind: 'bin', item: 'iron', capacity: 1, rect: { x: 2, y: 0, w: 2, h: 1 }, zones: { deposit: { x: 0, y: 0, w: 1, h: 1 } } }]),
     ).toThrow(/off the map/);
   });
 });

@@ -6,7 +6,7 @@
 // Holding something, they deliver it: products to a truck that wants them, metal to its bin, scrap to the
 // shredder (collecting more first if their hands aren't full yet).
 import { CARRY, STAFF } from '../../data/balance';
-import { ITEM_IDS, type ItemId } from '../../data/items';
+import { isProduct, ITEM_IDS } from '../../data/items';
 import { PIECE_KINDS, pieceItem } from '../../data/scrap';
 import { SIM } from '../../config';
 import { binCapacity } from '../effective';
@@ -44,7 +44,6 @@ export interface StaffWorld {
   bays: readonly BayDef[];
 }
 
-const PRODUCTS: ReadonlySet<ItemId> = new Set(['sheet', 'can']);
 const REACH = 0.35;
 
 export function staffPlace(e: Employee): string {
@@ -93,7 +92,7 @@ function chooseTarget(e: Employee, state: GameState, world: StaffWorld, brains: 
 
   if (e.stack.length > 0) {
     for (const item of new Set(e.stack)) {
-      if (PRODUCTS.has(item)) {
+      if (isProduct(item)) {
         const bay = world.bays.find((b) => {
           const s = state.bays[b.id]!;
           return s.phase === 'waiting' && s.item === item && s.have < s.want;
@@ -116,7 +115,7 @@ function chooseTarget(e: Employee, state: GameState, world: StaffWorld, brains: 
   for (const b of world.bays) {
     const bay = state.bays[b.id]!;
     if (bay.phase !== 'waiting' || !bay.item || bay.have >= bay.want || taken.lineBay.has(b.id)) continue;
-    const line = lines(world).find((l) => l.recipe.output === bay.item && state.lines[l.id]!.out > 0);
+    const line = lines(world).find((l) => state.lines[l.id]!.outItem === bay.item && state.lines[l.id]!.out > 0);
     if (line) return { kind: 'line', lineId: line.id, bayId: b.id };
   }
   if (!taken.tray) {
@@ -205,11 +204,14 @@ function act(e: Employee, target: StaffTarget, state: GameState, world: StaffWor
       const line = lines(world).find((l) => l.id === target.lineId)!;
       const bay = state.bays[target.bayId]!;
       const st = state.lines[line.id]!;
-      const carried = e.stack.filter((s) => s === line.recipe.output).length;
+      const item = st.outItem;
+      if (!item || item !== bay.item) return 'done';
+      const carried = e.stack.filter((s) => s === item).length;
       if (room <= 0 || st.out === 0 || carried >= bay.want - bay.have) return 'done';
       st.out--;
-      e.stack.push(line.recipe.output);
-      events.push({ type: 'itemMoved', item: line.recipe.output, from: line.id, to: place });
+      if (st.out === 0) st.outItem = null;
+      e.stack.push(item);
+      events.push({ type: 'itemMoved', item, from: line.id, to: place });
       return 'more';
     }
     case 'bay': {

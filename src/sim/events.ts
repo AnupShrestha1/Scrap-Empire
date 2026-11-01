@@ -15,6 +15,10 @@ export type SimEvent =
   | { type: 'storageFull'; station: string; item: ItemId }
   | { type: 'sold'; station: string; item: ItemId; value: number }
   | { type: 'processed'; station: string; item: ItemId }
+  /** The shredder turned up a rarer metal than iron. */
+  | { type: 'found'; station: string; item: ItemId }
+  /** The player stood on the factory's recipe pad long enough to open the recipe card. */
+  | { type: 'recipesOpen'; station: string }
   | { type: 'upgraded'; upgrade: UpgradeId; level: number }
   | { type: 'needCash'; amount: number }
   | { type: 'built'; station: string }

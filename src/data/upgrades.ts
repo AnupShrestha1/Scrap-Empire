@@ -8,8 +8,7 @@ export const UPGRADE_IDS = [
   'supply',
   'shredderYield',
   'extraction',
-  'pressSpeed',
-  'canSpeed',
+  'lineSpeed',
 ] as const;
 export type UpgradeId = (typeof UPGRADE_IDS)[number];
 
@@ -21,20 +20,22 @@ export interface UpgradeDef {
   maxLevel: number;
   /** Business level needed before the pad takes payment. */
   requiresLevel?: number;
+  /** Business level needed for each level in turn (index 0 is level 1); overrides requiresLevel. */
+  levelGates?: readonly number[];
   /** Factory line that must be built first (for line upgrades). */
   requiresLine?: string;
 }
 
 export const UPGRADES: Readonly<Record<UpgradeId, UpgradeDef>> = {
-  carry: { cost: 25, growth: 1.6, maxLevel: 8 },
-  magnet: { cost: 45, growth: 1.6, maxLevel: 6 },
-  shredderSpeed: { cost: 40, growth: 1.5, maxLevel: 8 },
-  binSize: { cost: 30, growth: 1.5, maxLevel: 8 },
-  supply: { cost: 60, growth: 1.7, maxLevel: 8 },
-  shredderYield: { cost: 120, growth: 1.6, maxLevel: 6, requiresLevel: 2 },
-  extraction: { cost: 250, growth: 1.8, maxLevel: 4, requiresLevel: 3 },
-  pressSpeed: { cost: 90, growth: 1.55, maxLevel: 6, requiresLine: 'press' },
-  canSpeed: { cost: 180, growth: 1.55, maxLevel: 6, requiresLine: 'can-line' },
+  carry: { cost: 50, growth: 1.6, maxLevel: 8 },
+  magnet: { cost: 100, growth: 1.6, maxLevel: 6 },
+  shredderSpeed: { cost: 160, growth: 1.5, maxLevel: 8 },
+  binSize: { cost: 140, growth: 1.5, maxLevel: 8 },
+  supply: { cost: 240, growth: 1.7, maxLevel: 8 },
+  shredderYield: { cost: 500, growth: 1.6, maxLevel: 6, requiresLevel: 3 },
+  // Levels 1, 3, 5 and 7 unlock copper, titanium, gold and platinum (balance.ts METAL_FINDS).
+  extraction: { cost: 600, growth: 1.75, maxLevel: 8, levelGates: [3, 4, 5, 5, 6, 6, 7, 7] },
+  lineSpeed: { cost: 400, growth: 1.55, maxLevel: 8, requiresLine: 'line-1' },
 };
 
 /** What each level does. */
@@ -51,9 +52,6 @@ export const UPGRADE_EFFECTS = {
   supplyMinIntervalS: 6,
   /** Shredder output multiplied by 1 + this per Yield level. */
   yieldPerLevel: 0.1,
-  /** Copper per scrap at Extraction level 1, and added per further level. */
-  copperBase: 0.15,
-  copperPerLevel: 0.05,
   /** Line batch time is multiplied by this per speed level. */
   lineCycleFactor: 0.85,
 } as const;
@@ -73,6 +71,12 @@ export const PURCHASE = {
   nextLevelPauseS: 0.6,
 } as const;
 
+/** Business level needed to buy the next level of an upgrade (0 when there's no gate). */
+export function requiredLevel(id: UpgradeId, level: number): number {
+  const u = UPGRADES[id];
+  return u.levelGates?.[level] ?? u.requiresLevel ?? 0;
+}
+
 export function upgradeCost(id: UpgradeId, level: number): number {
   const u = UPGRADES[id];
   return Math.round(u.cost * u.growth ** level);
@@ -87,7 +91,6 @@ export function emptyUpgradeCounts(): Record<UpgradeId, number> {
     supply: 0,
     shredderYield: 0,
     extraction: 0,
-    pressSpeed: 0,
-    canSpeed: 0,
+    lineSpeed: 0,
   };
 }

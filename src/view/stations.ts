@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { businessLevel, ORDERS, STAFF } from '../data/balance';
 import { TRUCK_ROUTE } from '../data/layout';
-import { UPGRADES, upgradeCost, type UpgradeId } from '../data/upgrades';
+import { requiredLevel, UPGRADES, upgradeCost, type UpgradeId } from '../data/upgrades';
 import { itemName, t, type StringKey } from '../i18n';
-import { binCapacity, processorCycleTicks } from '../sim/effective';
+import { binCapacity, metalUnlocked, processorCycleTicks } from '../sim/effective';
 import type { Simulation } from '../sim/simulation';
 import { secondsToTicks } from '../sim/state';
 import type { BayDef, BinDef, CashPadDef, ProcessorDef, Rect, StaffHutDef, StationDef } from '../sim/stations';
@@ -54,10 +54,16 @@ export function createStationViews(scene: THREE.Scene, models: Models, labels: L
       case 'cashPad':
         views.push(new CashPadView(scene, labels, s));
         break;
-      case 'factory':
+      case 'factory': {
         out.factory = new FactoryView(scene, models, labels, s, smoke);
         views.push(out.factory);
+        // Behind the factory: the pad that opens the recipe card.
+        scene.add(new PadProp(s.zones.recipes.w, s.zones.recipes.h, '☰', 0x7b5cc8).placeOn(s.zones.recipes).root);
+        const label = labels.add('pad-title');
+        label.at.copy(centre(s.zones.recipes, 0.7));
+        label.el.textContent = t('factory.recipes');
         break;
+      }
       case 'bay': {
         const view = new BayView(scene, models, labels, s, smoke);
         out.bays.set(s.id, view);
@@ -74,6 +80,17 @@ export function createStationViews(scene: THREE.Scene, models: Models, labels: L
       case 'staffHut':
         views.push(new StaffHutView(scene, models, labels, s));
         break;
+      case 'dealer': {
+        // A booth with a green awning; the gold pad in front buys every raw metal you carry.
+        const stand = booth(0x2f8f57);
+        stand.position.copy(centre(s.rect));
+        stand.rotation.y = Math.PI;
+        const title = labels.add('area-title');
+        title.at.copy(centre(s.rect, 2.4));
+        title.el.textContent = t('dealer.title');
+        scene.add(new PadProp(s.zones.sell.w, s.zones.sell.h, '$', 0xc98a1e).placeOn(s.zones.sell).root, stand);
+        break;
+      }
     }
   }
   return out;
@@ -245,7 +262,7 @@ export class BinView implements View {
   constructor(scene: THREE.Scene, labels: Labels, private readonly def: BinDef) {
     this.prop = new BinProp(def.item);
     this.prop.root.position.copy(centre(def.rect));
-    scene.add(this.prop.root, new PadProp(def.zones.sell.w, def.zones.sell.h, '$', 0xc98a1e).placeOn(def.zones.sell).root);
+    scene.add(this.prop.root);
     this.label = labels.add('bin-count');
     this.label.at.copy(centre(def.rect, 1.3));
   }
@@ -264,6 +281,14 @@ export class BinView implements View {
     const capacity = binCapacity(this.def, sim.state);
     this.prop.fill(count);
     const name = itemName(this.def.item);
+    // Bins for metals the shredder can't find yet stand dim and grey, so the next unlock is in view.
+    const unlocked = metalUnlocked(this.def.item, sim.state);
+    this.prop.setLocked(!unlocked);
+    if (!unlocked) {
+      setText(this.label, t('bin.locked', { item: name }));
+      this.label.el.classList.remove('warn');
+      return;
+    }
     const full = count >= capacity;
     setText(this.label, full ? t('station.storageFull', { item: name }) : `${name} ${count}/${capacity}`);
     this.label.el.classList.toggle('warn', full || performance.now() < this.flashUntil);
@@ -296,12 +321,20 @@ class CashPadView implements View {
 /** Why an upgrade pad won't take money yet, as display text; undefined when it's available. */
 function lockReason(id: UpgradeId, sim: Simulation): string | undefined {
   const def = UPGRADES[id];
-  if (def.requiresLevel && businessLevel(sim.state.earned) < def.requiresLevel) return t('locked.level', { level: def.requiresLevel });
-  if (def.requiresLine && !sim.state.lines[def.requiresLine]?.built) {
-    const line = sim.factoryLine(def.requiresLine);
-    return t('locked.line', { name: line ? t(line.name) : def.requiresLine });
-  }
+  const gate = requiredLevel(id, sim.state.upgrades[id]);
+  if (gate && businessLevel(sim.state.earned) < gate) return t('locked.level', { level: gate });
+  if (def.requiresLine && !sim.state.lines[def.requiresLine]?.built) return t('locked.line', { name: lineName(sim, def.requiresLine) });
   return undefined;
+}
+
+/** "Line 2" for a factory line id. */
+export function lineName(sim: Simulation, lineId: string): string {
+  for (const s of sim.stations) {
+    if (s.kind !== 'factory') continue;
+    const i = s.lines.findIndex((l) => l.id === lineId);
+    if (i >= 0) return t('line.name', { n: i + 1 });
+  }
+  return lineId;
 }
 
 class StaffHutView implements View {
@@ -319,7 +352,15 @@ class StaffHutView implements View {
     const hired = sim.state.employees.length;
     const cost = STAFF.costs[hired];
     const name = t('staff.title', { hired, max: STAFF.costs.length });
-    padTitle(this.title, name, cost === undefined ? t('staff.full') : `$${cost - sim.state.hirePaid}`, false);
+    const locked = businessLevel(sim.state.earned) < STAFF.requiresLevel;
+    const price = locked
+      ? t('locked.level', { level: STAFF.requiresLevel })
+      : cost === undefined
+        ? t('staff.full')
+        : cost === 0
+          ? t('staff.free')
+          : `$${cost - sim.state.hirePaid}`;
+    padTitle(this.title, name, price, locked);
   }
 }
 

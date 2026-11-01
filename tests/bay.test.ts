@@ -29,10 +29,11 @@ function standAt(state: GameState, x: number, y: number, ticks: number, events: 
   return events;
 }
 
-/** A game with the Press built and a truck waiting in bay A. */
+/** A game past its first order, with line 1 making sheets and a truck waiting in bay A. */
 function waitingTruck(): GameState {
   const state = createNewGame(grid, STATIONS);
-  state.lines.press!.built = true;
+  state.lines['line-1']!.built = true;
+  state.firstOrder = true;
   runBay(state, secondsToTicks(ORDERS.driveInS + 2));
   return state;
 }
@@ -44,7 +45,20 @@ describe('the loading bay', () => {
     expect(state.bays[bayA.id]!.phase).toBe('empty');
   });
 
-  it('gets a truck ordering something the factory makes', () => {
+  it('sends the first truck the moment the first product is made, wanting just a few', () => {
+    const state = createNewGame(grid, STATIONS);
+    const line = state.lines['line-1']!;
+    line.built = true;
+    line.product = 'toolbox';
+    runBay(state, 2);
+    expect(state.bays[bayA.id]!.phase).toBe('empty');
+    Object.assign(line, { out: 1, outItem: 'toolbox' });
+    runBay(state, 1);
+    expect(state.bays[bayA.id]).toMatchObject({ phase: 'arriving', item: 'toolbox', want: ORDERS.firstAmount });
+    expect(state.firstOrder).toBe(true);
+  });
+
+  it('gets a truck ordering something a line is set to make', () => {
     const bay = waitingTruck().bays[bayA.id]!;
     expect(bay.phase).toBe('waiting');
     expect(bay.item).toBe('sheet');
@@ -82,30 +96,34 @@ describe('the loading bay', () => {
   });
 });
 
-describe('the outlet', () => {
-  it('sells carried products at base price after the stand-still, and nothing else', () => {
+describe('the stall', () => {
+  it('sells carried products at their price after the stand-still, and no metal', () => {
     const state = createNewGame(grid, STATIONS);
-    state.player.stack = ['sheet', 'iron', 'can'];
+    state.player.stack = ['sheet', 'iron', 'motor'];
     standAt(state, outlet.rect.x, outlet.rect.y, secondsToTicks(PURCHASE.delayS) - 1);
     expect(state.player.stack).toHaveLength(3);
     standAt(state, outlet.rect.x, outlet.rect.y, secondsToTicks(PURCHASE.delayS) + 20);
     expect(state.player.stack).toEqual(['iron']);
-    expect(state.money).toBe(PRICES.sheet + PRICES.can);
+    expect(state.money).toBe(PRICES.sheet + PRICES.motor);
+  });
+
+  it('pays less than a truck for the same products', () => {
+    expect(PRICES.sheet * ORDERS.bonus).toBeGreaterThan(PRICES.sheet);
   });
 });
 
-describe('save v8 → v9', () => {
-  it('adds output spots and empty bays', () => {
+describe('save v8 → v11', () => {
+  it('adds output spots and empty bays, and the press becomes line 1', () => {
     const store = memoryStorage();
     const v8 = structuredClone(createNewGame(grid, STATIONS)) as unknown as Record<string, any>;
     delete v8.bays;
-    v8.lines.press = { built: true, progress: 3 };
-    delete v8.lines['can-line'].out;
+    v8.lines = { press: { built: true, progress: 3 }, 'can-line': { built: false, progress: 0 } };
     store.setItem(SAVE_KEYS.main, JSON.stringify({ v: 8, savedAt: 0, state: v8 }));
     const loaded = new SaveManager(store, isGameState).load();
     expect(loaded).not.toBeNull();
     const state = sanitizeState(loaded!.state, grid, STATIONS);
-    expect(state.lines.press).toEqual({ built: true, progress: 3, out: 0 });
+    expect(state.lines['line-1']).toEqual({ built: true, product: 'sheet', progress: 0, out: 0, outItem: null });
+    expect(state.lines['line-2']).toMatchObject({ built: false, product: 'can' });
     expect(state.bays['bay-a']!.phase).toBe('empty');
   });
 });
