@@ -11,7 +11,7 @@ import { setLineProduct, stepLine } from './systems/manufacturing';
 import { newInteractionState, padCharge, stepInteraction, type InteractionState } from './systems/interaction';
 import { stepPlayer } from './systems/player';
 import { processorCycleTicks, shredderFinds } from './effective';
-import { businessLevel } from '../data/balance';
+import { businessLevel, PRICES } from '../data/balance';
 import { levelChest } from '../data/unlocks';
 import { stepObjectives } from './systems/objectives';
 import { processorStatus, stepProcessor } from './systems/processing';
@@ -142,6 +142,30 @@ export class Simulation {
       }
     }
     return false;
+  }
+
+  /**
+   * Sells up to `count` items from a bin at the Scrap Dealer's price (the storage card's buttons). Only
+   * while the player stands on a dealer's storage pad. Returns how many were sold.
+   */
+  sellStock(binId: string, count: number): number {
+    const zone = this.interaction.zoneKey;
+    const dealer = this.stations.find((s) => s.kind === 'dealer' && zone === `${s.id}:stock`);
+    const bin = this.binDefs.get(binId);
+    const stored = this.state.bins[binId];
+    if (!dealer || !bin || !stored) return 0;
+    const n = Math.min(count, stored.count);
+    const value = PRICES[bin.item];
+    const levelBefore = businessLevel(this.state.earned);
+    for (let i = 0; i < n; i++) {
+      stored.count--;
+      this.state.money += value;
+      this.state.earned += value;
+      this.events.push({ type: 'sold', station: dealer.id, item: bin.item, value });
+    }
+    if (n > 0) this.dirty = true;
+    this.levelUp(levelBefore, businessLevel(this.state.earned));
+    return n;
   }
 
   /** A factory production line by id. */

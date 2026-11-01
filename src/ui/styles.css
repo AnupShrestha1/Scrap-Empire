@@ -656,3 +656,23 @@ body {
   text-shadow: none;
 }
 
+/* The storage card (src/ui/stock.ts) reuses the recipe card's look. */
+.stock-row {
+  align-items: center;
+}
+
+.stock-name {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.stock-name small {
+  color: #9fb3c8;
+  font-size: 11px;
+}
+
+.stock-sell {
+  min-width: 84px;
+}
+

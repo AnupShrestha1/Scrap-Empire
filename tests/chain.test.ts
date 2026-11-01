@@ -4,6 +4,7 @@ import { BIG_KINDS, PIECE_KINDS, SMALL_KINDS } from '../src/data/scrap';
 import { PURCHASE } from '../src/data/upgrades';
 import type { SimEvent } from '../src/sim/events';
 import { parseGrid } from '../src/sim/grid';
+import { Simulation } from '../src/sim/simulation';
 import { createNewGame, secondsToTicks, type GameState } from '../src/sim/state';
 import type { DumpDef, ProcessorDef, StationDef } from '../src/sim/stations';
 import { dropStack, fieldUnits, stepField } from '../src/sim/systems/field';
@@ -176,15 +177,23 @@ describe('carrying', () => {
 });
 
 describe('the Scrap Dealer', () => {
-  it('sells metal straight from storage on its stock pad, the fullest bin first', () => {
+  it('opens the storage card on its stock pad, and sells only what is picked there', () => {
     const state = emptyGame();
-    state.bins.bin!.count = 3;
-    standIn(state, 6, secondsToTicks(PURCHASE.delayS) - 1, [], 3);
-    expect(state.bins.bin!.count).toBe(3);
-    const events = standIn(state, 6, 80, [], 3);
-    expect(state.bins.bin!.count).toBe(0);
+    state.bins.bin!.count = 5;
+    const sim = new Simulation(state, grid, STATIONS, 'dump');
+    // Not on the pad: nothing sells.
+    expect(sim.sellStock('bin', 3)).toBe(0);
+    state.player.x = 6.5;
+    state.player.y = 3.5;
+    for (let i = 0; i < (PURCHASE.delayS + 0.5) * 4; i++) sim.advance(250);
+    const events: SimEvent[] = [];
+    sim.drainEvents(events);
+    expect(events).toContainEqual({ type: 'stockOpen', station: 'dealer' });
+    expect(state.bins.bin!.count).toBe(5);
+    expect(sim.sellStock('bin', 3)).toBe(3);
+    expect(state.bins.bin!.count).toBe(2);
     expect(state.money).toBe(3 * PRICES.iron);
-    expect(events.filter((e) => e.type === 'sold')).toHaveLength(3);
+    expect(sim.sellStock('bin', 10)).toBe(2);
   });
 
   it('buys carried metal one item at a time after a stand-still, and nothing else', () => {

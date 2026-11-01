@@ -65,7 +65,7 @@ export function stepInteraction(
     inter.dwell = 0;
     inter.warned = false;
   } else if (hit) {
-    const rate = hit.zone === 'sell' || hit.zone === 'stock' ? SELL_PER_S : CARRY.transferPerS;
+    const rate = hit.zone === 'sell' ? SELL_PER_S : CARRY.transferPerS;
     inter.budget = Math.min(1, inter.budget + rate / SIM.tickRate);
     inter.dwell++;
   }
@@ -73,10 +73,11 @@ export function stepInteraction(
   if (hit.zone === 'buy') return stepPurchase(state, hit.station, inter, events);
   if (hit.zone === 'build') return stepBuild(state, hit.station, inter, events);
   if (hit.zone === 'hire') return stepHire(state, hit.station, inter, events);
-  if (hit.zone === 'recipes') {
-    // Opens the recipe card once per visit; choosing happens through Simulation.setLineProduct.
+  if (hit.zone === 'recipes' || hit.zone === 'stock') {
+    // Opens a card once per visit (choosing products, or what to sell from storage); the choice comes
+    // back through Simulation.setLineProduct or Simulation.sellStock.
     if (inter.dwell >= secondsToTicks(PURCHASE.delayS) && !inter.warned) {
-      events.push({ type: 'recipesOpen', station: hit.station.id });
+      events.push({ type: hit.zone === 'recipes' ? 'recipesOpen' : 'stockOpen', station: hit.station.id });
       inter.warned = true;
     }
     return false;
@@ -183,7 +184,7 @@ function stepBuild(state: GameState, factory: FactoryDef, inter: InteractionStat
 function transferOne(
   state: GameState,
   stations: readonly StationDef[],
-  hit: Exclude<ZoneHit, { zone: 'buy' | 'build' | 'hire' | 'recipes' }>,
+  hit: Exclude<ZoneHit, { zone: 'buy' | 'build' | 'hire' | 'recipes' | 'stock' }>,
   inter: InteractionState,
   events: SimEvent[],
 ): boolean {
@@ -251,23 +252,6 @@ function transferOne(
       state.money += PRICES[item];
       state.earned += PRICES[item];
       events.push({ type: 'sold', station: id, item, value: PRICES[item] });
-      return true;
-    }
-
-    case 'stock': {
-      // Sells metal straight from the bins, the fullest bin first, after the usual stand-still.
-      if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return false;
-      let fullest: BinDef | undefined;
-      for (const s of stations) {
-        if (s.kind !== 'bin' || state.bins[s.id]!.count === 0) continue;
-        if (!fullest || state.bins[s.id]!.count > state.bins[fullest.id]!.count) fullest = s;
-      }
-      if (!fullest) return false;
-      state.bins[fullest.id]!.count--;
-      const value = PRICES[fullest.item];
-      state.money += value;
-      state.earned += value;
-      events.push({ type: 'sold', station: id, item: fullest.item, value });
       return true;
     }
 

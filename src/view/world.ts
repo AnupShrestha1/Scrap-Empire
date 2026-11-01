@@ -15,6 +15,7 @@ import { Flyers, Puffs, type Target } from './fx';
 import { RingGauge } from './props';
 import { createStationViews, HintArrow, lineName, StaffView, type StationViews } from './stations';
 import { RecipeCard } from '../ui/recipes';
+import { StockCard } from '../ui/stock';
 import { Banner } from '../ui/banner';
 import { Reveal } from './reveal';
 import { businessLevel } from '../data/balance';
@@ -49,6 +50,7 @@ export class World {
   /** Golden sparkle where a rare metal turns up. */
   private readonly sparkle = new Puffs(0xffe27a, 60);
   private readonly recipeCard: RecipeCard;
+  private readonly stockCard: StockCard;
   private readonly reveal: Reveal;
   private readonly banner: Banner;
   /** While set, the camera looks here instead of at the player (an unlock moment). */
@@ -102,6 +104,7 @@ export class World {
     this.views.push(field, this.staff, ...this.stations.views, hint);
     this.scene.add(this.player.root, this.charge.root, hint.root, this.dust.root, this.smoke.root, this.flyers.root, this.sparkle.root);
     this.recipeCard = new RecipeCard(uiLayer, sim, () => ctx.sfx.play('upgrade'));
+    this.stockCard = new StockCard(uiLayer, sim);
     this.unlocked = new Set(unlockedMetals(sim.state));
 
     window.addEventListener('resize', () => this.resize());
@@ -164,6 +167,7 @@ export class World {
     this.sparkle.update(dt);
     this.flyers.update(dt);
     this.recipeCard.update();
+    this.stockCard.update();
     this.announceUnlocks();
     const revealed = this.reveal.update(businessLevel(state.earned), dt);
     if (revealed.length > 0) {
@@ -324,6 +328,10 @@ export class World {
       }
       case 'recipesOpen':
         this.recipeCard.show(event.station);
+        sfx.play('pickup');
+        break;
+      case 'stockOpen':
+        this.stockCard.show(event.station);
         sfx.play('pickup');
         break;
       case 'processed': {

@@ -261,5 +261,6 @@ Changes made while tuning: business level thresholds lowered (see 7.4), supply 1
 - Each level-up shows a banner with what it opened and the chest, the camera swings to the biggest thing unlocked for about 2 s, and it pops in with a puff.
 - The HUD's level chip says what the next level opens.
 - After the objective chain, goals rotate (truck orders, shredding, products, rare finds), each round bigger and better paid.
-- A "Sell storage" pad beside the Scrap Dealer sells metal straight from the bins, fullest bin first (user request).
+- A "Sell storage" pad beside the Scrap Dealer opens a card listing each unlocked metal in storage, with "Sell 10" and "Sell all" (user requests).
+- Six buyer truck lanes (user request), one opening per business level from 3 to 8; the east gate road is widened to reach them all and the stall moved south of the lanes.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ORDERS, PRICES } from '../src/data/balance';
+import { BUSINESS_LEVELS, ORDERS, PRICES } from '../src/data/balance';
 import { STATIONS, YARD } from '../src/data/layout';
 import { PURCHASE } from '../src/data/upgrades';
 import { memoryStorage } from '../src/platform/memoryStorage';
@@ -32,6 +32,7 @@ function standAt(state: GameState, x: number, y: number, ticks: number, events: 
 /** A game past its first order, with line 1 making sheets and a truck waiting in bay A. */
 function waitingTruck(): GameState {
   const state = createNewGame(grid, STATIONS);
+  state.earned = BUSINESS_LEVELS[2]!;
   state.lines['line-1']!.built = true;
   state.firstOrder = true;
   runBay(state, secondsToTicks(ORDERS.driveInS + 2));
@@ -47,6 +48,7 @@ describe('the loading bay', () => {
 
   it('sends the first truck the moment the first product is made, wanting just a few', () => {
     const state = createNewGame(grid, STATIONS);
+    state.earned = BUSINESS_LEVELS[2]!;
     const line = state.lines['line-1']!;
     line.built = true;
     line.product = 'toolbox';
@@ -93,6 +95,20 @@ describe('the loading bay', () => {
     expect(state.bays[bayA.id]!.phase).toBe('leaving');
     expect(state.money).toBe(0);
     expect(events.some((e) => e.type === 'orderExpired')).toBe(true);
+  });
+});
+
+describe('truck lanes', () => {
+  it('open one per business level, from 3 to 8', () => {
+    const bays = STATIONS.filter((s): s is BayDef => s.kind === 'bay');
+    expect(bays).toHaveLength(6);
+    expect(bays.map((b) => b.requiresLevel).sort()).toEqual([3, 4, 5, 6, 7, 8]);
+    const state = createNewGame(grid, STATIONS);
+    state.lines['line-1']!.built = true;
+    state.firstOrder = true;
+    state.earned = BUSINESS_LEVELS[3]!; // level 4: bays A and B
+    for (let i = 0; i < 5; i++) for (const b of bays) stepBay(b, state.bays[b.id]!, state, [factory], []);
+    expect(bays.filter((b) => state.bays[b.id]!.phase !== 'empty').map((b) => b.id)).toEqual(['bay-a', 'bay-b']);
   });
 });
 

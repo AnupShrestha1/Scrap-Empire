@@ -10,7 +10,7 @@ import type { BayDef, BinDef, CashPadDef, ProcessorDef, Rect, StaffHutDef, Stati
 import { currentObjective } from '../sim/systems/objectives';
 import { processorStatus } from '../sim/systems/processing';
 import { bayTruckX, bayTruckY, SUPPLIER_TRUCK_Y, supplierTruckX } from '../sim/vehicles';
-import { fitToFootprint, type Models } from './assets';
+import { bakedModel, fitToFootprint, type Models } from './assets';
 import { Character } from './character';
 import { centre, padTitle, type View } from './common';
 import { FactoryView } from './factory';
@@ -149,7 +149,7 @@ class SupplierTruckView implements View {
 
   constructor(scene: THREE.Scene, models: Models, labels: Labels, smoke: Puffs) {
     this.exhaust = new Exhaust(smoke);
-    this.truck = new THREE.Group().add(fitToFootprint(models.get('supplierTruck'), TRUCK_ROUTE.length));
+    this.truck = new THREE.Group().add(bakedModel(models, 'supplierTruck', TRUCK_ROUTE.length));
     // Nose east, towards the dump site.
     this.truck.rotation.y = Math.PI / 2;
     scene.add(this.truck);
@@ -182,7 +182,7 @@ export class BayView implements View {
 
   constructor(scene: THREE.Object3D, models: Models, labels: LabelMaker, private readonly def: BayDef, smoke: Puffs) {
     this.exhaust = new Exhaust(smoke);
-    this.truck = new THREE.Group().add(fitToFootprint(models.get('buyerTruck'), 3));
+    this.truck = new THREE.Group().add(bakedModel(models, 'buyerTruck', 3));
     this.truck.rotation.y = Math.PI / 2;
     scene.add(this.truck, new PadProp(def.zones.load.w, def.zones.load.h, '▶', 0xd9a62b).placeOn(def.zones.load).root);
     this.bubble = labels.add('bubble order');

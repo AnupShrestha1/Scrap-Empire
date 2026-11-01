@@ -136,6 +136,15 @@ export function bake(obj: THREE.Object3D): Baked {
   return { geometry, material: materials.length === 1 ? materials[0]! : materials };
 }
 
+/** A model fitted to `size` tiles and flattened into a single mesh: one draw call however many parts it has. */
+export function bakedModel(models: Models, key: ModelKey, size: number): THREE.Mesh {
+  const { geometry, material } = bake(new THREE.Group().add(fitToFootprint(models.get(key), size)));
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
 /**
  * Scales `obj` uniformly so its largest horizontal side is `size` tiles, centres it on its origin and
  * sits it on the ground, so it covers the footprint it's placed on.

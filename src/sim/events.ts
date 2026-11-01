@@ -19,6 +19,8 @@ export type SimEvent =
   | { type: 'found'; station: string; item: ItemId }
   /** The player stood on the factory's recipe pad long enough to open the recipe card. */
   | { type: 'recipesOpen'; station: string }
+  /** The player stood on the Scrap Dealer's storage pad long enough to open the sell card. */
+  | { type: 'stockOpen'; station: string }
   | { type: 'upgraded'; upgrade: UpgradeId; level: number }
   | { type: 'needCash'; amount: number }
   | { type: 'built'; station: string }

@@ -24,8 +24,8 @@ export const YARD: readonly string[] = [
   'gg##################################################gTgg',
   'gg#................................................#gggg',
   'Tg#............................L...................#gggg',
-  'Tg#.dddddddddddddd.....................::::::::::::#gggg',
-  'Tg#.dddddddddddddd........:::::::......::::::::::::#gTTT',
+  'Tg#.dddddddddddddd.....................::::::::::::=====',
+  'Tg#.dddddddddddddd........:::::::......::::::::::::=====',
   'Tg#.dddddddddddddd........:::::::......::::::::::::=====',
   'gg#.dddddddddddddd.::::::.:::::::......::::::::::::=====',
   'gB#.dddddddddddddd.::::::.:::::::......::::::::::::=====',
@@ -33,8 +33,8 @@ export const YARD: readonly string[] = [
   '====dddddddddddddd.::::::.:::::::......::::::::::::=====',
   '====dddddddddddddd.::::::.:::::::......::::::::::::=====',
   'gg#.dddddddddddddd.::::::.:::::::......::::::::::::=====',
-  'Tg#.dddddddddddddd.::::::.:::::::......::::::::::::#ggTT',
-  'gg#.dddddddddddddd........:::::::......::::::::::::#gggg',
+  'Tg#.dddddddddddddd.::::::.:::::::......::::::::::::=====',
+  'gg#.dddddddddddddd........:::::::......::::::::::::=====',
   'Tg#.dddddddddddddd.L......::::.........::::::::::::#ggTg',
   'Tg#.dddddddddddddd........::::.........::::::::::::#gTgT',
   'gg#.dddddddddddddd........::::.....................#gTTg',
@@ -120,26 +120,30 @@ export const STATIONS: readonly StationDef[] = [
   // Line speed behind the factory, a dead end.
   cashPad('pad-line-speed', 'lineSpeed', 35, 6),
   // The loading bay: buyer trucks back in along two lanes from the east gate. Load them from the zone at
-  // their tail; products can also be sold outright at the outlet, a dead end south of the lanes.
-  {
-    id: 'bay-a',
-    kind: 'bay',
-    rect: { x: 44, y: 9, w: 3, h: 1 },
-    lane: { row: 9, parkX: 44, startX: 58 },
-    zones: { load: { x: 42, y: 8, w: 2, h: 3 } },
-  },
-  {
-    id: 'bay-b',
-    kind: 'bay',
-    requiresLevel: 4,
-    rect: { x: 44, y: 13, w: 3, h: 1 },
-    lane: { row: 13, parkX: 44, startX: 58 },
-    zones: { load: { x: 42, y: 12, w: 2, h: 3 } },
-  },
+  // their tail. Six lanes, two rows apart, open one per business level from 3 to 8 (unlocks.ts). Products
+  // can also be sold outright at the stall (outlet), a dead end south of the lanes.
+  bay('bay-a', 8, 3),
+  bay('bay-b', 12, 4),
+  bay('bay-c', 10, 5),
+  bay('bay-d', 14, 6),
+  bay('bay-e', 6, 7),
+  bay('bay-f', 16, 8),
   // The staff hut below the dump site; hire employees on the pad in front of it (a dead end).
   { id: 'staff-hut', kind: 'staffHut', rect: { x: 16, y: 21, w: 2, h: 2 }, zones: { hire: { x: 16, y: 23, w: 2, h: 1 } } },
-  { id: 'outlet', kind: 'outlet', rect: { x: 44, y: 17, w: 2, h: 1 }, zones: { sell: { x: 44, y: 17, w: 2, h: 1 } } },
+  { id: 'outlet', kind: 'outlet', rect: { x: 44, y: 19, w: 2, h: 1 }, zones: { sell: { x: 44, y: 19, w: 2, h: 1 } } },
 ];
+
+/** A loading bay lane on `row`, opening at business level `level`: trucks back in from the east gate. */
+function bay(id: string, row: number, level: number): StationDef {
+  return {
+    id,
+    kind: 'bay',
+    requiresLevel: level,
+    rect: { x: 44, y: row, w: 3, h: 1 },
+    lane: { row, parkX: 44, startX: 58 },
+    zones: { load: { x: 42, y: row, w: 2, h: 1 } },
+  };
+}
 
 /** A 2 × 2 bin; metal goes in from the tiles either side of it. */
 function bin(id: string, item: MetalId, x: number, y: number): StationDef {
