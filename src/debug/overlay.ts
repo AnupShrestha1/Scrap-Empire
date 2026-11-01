@@ -2,6 +2,8 @@ import type { GameContext } from '../context';
 
 const REFRESH_MS = 250;
 const SPEEDS = [1, 4, 16] as const;
+/** How long the reset button waits for its second tap. */
+const RESET_CONFIRM_MS = 3000;
 
 export interface DebugActions {
   /** Wipes the save and reloads into a new game. */
@@ -18,6 +20,12 @@ export class DebugOverlay {
   private readonly el: HTMLDivElement;
   private readonly readout: HTMLPreElement;
   private readonly speedButton: HTMLButtonElement;
+  /**
+   * Asks for a second tap instead of confirm(): embedded browsers (the CrazyGames iframe, many phones)
+   * block dialogs, and a blocked confirm() answers "no" without showing anything.
+   */
+  private readonly resetButton: HTMLButtonElement;
+  private resetArmedUntil = 0;
 
   constructor(
     layer: HTMLElement,
@@ -32,15 +40,24 @@ export class DebugOverlay {
     const tools = document.createElement('div');
     tools.className = 'debug-tools';
     this.speedButton = button('Speed ×1', () => this.cycleSpeed());
+    this.resetButton = button('Reset save', () => {
+      if (performance.now() < this.resetArmedUntil) {
+        actions.resetSave();
+        return;
+      }
+      this.resetArmedUntil = performance.now() + RESET_CONFIRM_MS;
+      this.resetButton.textContent = 'Tap again to reset';
+      setTimeout(() => {
+        this.resetButton.textContent = 'Reset save';
+      }, RESET_CONFIRM_MS);
+    });
     tools.append(
       this.speedButton,
       button('+$100', () => {
         ctx.sim.state.money += 100;
         ctx.sim.dirty = true;
       }),
-      button('Reset save', () => {
-        if (confirm('Delete this save and start a new game?')) actions.resetSave();
-      }),
+      this.resetButton,
     );
     this.el.append(this.readout, tools);
     layer.append(this.el);

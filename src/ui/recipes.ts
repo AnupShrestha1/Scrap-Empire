@@ -64,7 +64,12 @@ export class RecipeCard {
     const factory = this.sim.stations.find((s): s is FactoryDef => s.kind === 'factory' && s.id === this.open);
     if (!factory) return;
     const { state } = this.sim;
-    const key = JSON.stringify([factory.lines.map((l) => state.lines[l.id]), PRODUCTS.map((p) => productUnlocked(p, state))]);
+    // Only what the card shows: rebuilding on every tick of a working line would swallow taps (the button
+    // under the finger gets replaced between press and release).
+    const key = JSON.stringify([
+      factory.lines.map((l) => [state.lines[l.id]!.built, state.lines[l.id]!.product]),
+      PRODUCTS.map((p) => productUnlocked(p, state)),
+    ]);
     if (key === this.shown) return;
     this.shown = key;
     this.rows.replaceChildren(
