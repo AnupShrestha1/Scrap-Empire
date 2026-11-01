@@ -430,3 +430,61 @@ body {
 .label3d.float.cash {
   color: #ffd76a;
 }
+
+.fly-coin {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff3b0, #ffd23f 45%, #d99a14);
+  box-shadow: 0 0 0 2px #a8700c inset;
+  pointer-events: none;
+}
+
+.hud-chip.bump {
+  animation: hud-bump 0.25s ease-out;
+}
+
+@keyframes hud-bump {
+  40% {
+    transform: scale(1.12);
+  }
+}
+
+.label3d.note {
+  font-size: 11px;
+  color: #ff8a7a;
+}
+
+.label3d.area-title {
+  font-size: 13px;
+  color: #ffe0b0;
+}
+
+.label3d.bubble.order {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.label3d .patience {
+  display: block;
+  width: 64px;
+  height: 5px;
+  border-radius: 3px;
+  background: #d5dbe3;
+  overflow: hidden;
+}
+
+.label3d .patience i {
+  display: block;
+  height: 100%;
+  background: #5cc84a;
+}
+
+.label3d .patience i.low {
+  background: #e0483c;
+}

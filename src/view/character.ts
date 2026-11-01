@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { ItemId } from '../data/items';
 import { PLAYER } from '../data/player';
 import type { ModelKey, Models } from './assets';
-import { ITEM_HEIGHT, itemMesh } from './props';
+import { ITEM_COLORS, ITEM_HEIGHT, itemGeometry, mat } from './props';
 
 /** Characters are scaled up from Kenney's size so they read at our camera distance. */
 const SCALE = 1.7;
@@ -24,16 +24,21 @@ export class Character {
   private readonly actions: Record<'idle' | 'walk' | 'sprint', THREE.AnimationAction>;
   private current: THREE.AnimationAction;
   private readonly stack = new THREE.Group();
-  private readonly stackMeshes: THREE.Mesh[] = [];
-  private shownStack = '';
+  private readonly stackMeshes = new Map<ItemId, THREE.InstancedMesh>();
+  private stackHeight = 0;
+  private readonly m = new THREE.Matrix4();
   private heading = 0;
   private lean = 0;
   private lastX = NaN;
   private lastZ = NaN;
   private smoothSpeed = 0;
+  /** Seconds since the last squash (picking something up), for a quick springy bounce. */
+  private squashAge = Infinity;
+  private readonly model: THREE.Object3D;
 
   constructor(models: Models, key: ModelKey) {
     const model = models.get(key);
+    this.model = model;
     model.scale.setScalar(SCALE);
     this.root.add(model);
     this.mixer = new THREE.AnimationMixer(model);
@@ -81,39 +86,67 @@ export class Character {
       next.timeScale = THREE.MathUtils.clamp(this.smoothSpeed / pace, 0.75, 1.1);
     }
     this.mixer.update(dt);
+    this.squashAge += dt;
+    // A damped spring: squat and widen, then bounce back.
+    const wobble = this.squashAge < 0.35 ? Math.sin((this.squashAge / 0.35) * Math.PI * 2) * (1 - this.squashAge / 0.35) * 0.12 : 0;
+    this.model.scale.set(SCALE * (1 + wobble * 0.6), SCALE * (1 - wobble), SCALE * (1 + wobble * 0.6));
 
-    this.showStack(stack);
     // The stack leans back as the character speeds up and forward as it stops.
     const accel = speed - this.smoothSpeed;
     this.lean += (THREE.MathUtils.clamp(accel * 0.08, -0.25, 0.25) - this.lean) * (1 - Math.exp(-8 * dt));
-    this.stackMeshes.forEach((m, i) => {
-      m.position.z = -this.lean * i * 0.04;
-    });
+    this.showStack(stack);
+  }
+
+  /** Running speed in tiles per second, smoothed. */
+  get speed(): number {
+    return this.smoothSpeed;
+  }
+
+  /** A quick springy squash, when something lands on the stack. */
+  squash(): void {
+    if (this.squashAge > 0.15) this.squashAge = 0;
   }
 
   /** Where items fly to when picked up: the top of the stack. */
   stackTop(out: THREE.Vector3): THREE.Vector3 {
-    const top = this.stackMeshes.at(-1);
-    out.set(0, top ? top.position.y + 0.15 : 0, 0);
+    out.set(0, this.stackHeight + 0.15, 0);
     return this.stack.localToWorld(out);
   }
 
+  /**
+   * Lays the carried items out on the back: one instanced mesh per item type (so a stack costs a draw
+   * call or two however tall it is), each item shifted a little more by the lean the higher it sits.
+   */
   private showStack(stack: readonly ItemId[]): void {
     const shown = stack.slice(0, MAX_SHOWN);
-    const key = shown.join(',');
-    if (key === this.shownStack) return;
-    this.shownStack = key;
-    for (const m of this.stackMeshes) this.stack.remove(m);
-    this.stackMeshes.length = 0;
+    const counts = new Map<ItemId, number>();
     let y = 0;
     shown.forEach((item, i) => {
-      const m = itemMesh(item);
-      m.position.y = y + ITEM_HEIGHT[item] / 2;
-      m.rotation.y = i % 2 === 0 ? 0 : 0.18;
-      if (item === 'scrap') m.rotation.y = (i % 3) * 0.3 - 0.3;
+      const mesh = this.stackMesh(item);
+      const n = counts.get(item) ?? 0;
+      const turn = item === 'scrap' ? (i % 3) * 0.3 - 0.3 : i % 2 === 0 ? 0 : 0.18;
+      this.m.makeRotationY(turn).setPosition(0, y + ITEM_HEIGHT[item] / 2, -this.lean * i * 0.04);
+      mesh.setMatrixAt(n, this.m);
+      counts.set(item, n + 1);
       y += ITEM_HEIGHT[item];
-      this.stack.add(m);
-      this.stackMeshes.push(m);
     });
+    this.stackHeight = y;
+    for (const [item, mesh] of this.stackMeshes) {
+      mesh.count = counts.get(item) ?? 0;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  private stackMesh(item: ItemId): THREE.InstancedMesh {
+    let mesh = this.stackMeshes.get(item);
+    if (!mesh) {
+      mesh = new THREE.InstancedMesh(itemGeometry(item), mat(ITEM_COLORS[item]), MAX_SHOWN);
+      mesh.castShadow = true;
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      this.stackMeshes.set(item, mesh);
+      this.stack.add(mesh);
+    }
+    return mesh;
   }
 }

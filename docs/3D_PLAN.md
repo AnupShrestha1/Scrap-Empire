@@ -1,6 +1,6 @@
 # Scrap Empire — Move to 3D
 
-Approved 2026-11-01. R0 and R1 are done; R2 is next.
+Approved 2026-11-01. R0, R1 and R2 are done.
 
 **Goal:** replace the 2D isometric pixel art with low-poly 3D in the style of today's trending idle-arcade tycoons: chunky flat-coloured models, soft shadows, a camera that follows the player from a high angle, and items stacked visibly on the character's back. Gameplay, layout, saves and the progression plan (docs/PROGRESSION.md) stay as they are.
 
@@ -68,7 +68,7 @@ Free scrapyard packs exist (ithappy's *Junkyard*, TurboSquid's *Junk Yard*), but
 |---|---|---|
 | **R0 — Look test** | Add Three.js. One small scene: ground, the player walking with a stack, a truck, a code-built shredder and scrap. Measure size and frame rate on desktop and phone width | **Done.** Approved after tuning (zoom, run pace, pad timer, solid trucks) |
 | **R1 — Full port** | Every station, staff, trucks, the field, pads, labels, hint arrow, camera follow and the debug overlay in 3D. Remove Phaser and the pixel pipeline | **Done.** 3D is the game at `/`; Phaser removed; 3.0 MB build, 60 fps, ~100–170 draw calls |
-| **R2 — Feel** | Factory rebuilt from Factory Kit parts, a livelier shredder, dump-site ground, squash on pickups, coin bursts, truck exhaust, yard decoration (containers, tanks) | Plays and feels like the genre |
+| **R2 — Feel** | Factory rebuilt from Factory Kit parts, a livelier shredder, dump-site ground, squash on pickups, coin bursts, truck exhaust, yard decoration (containers, tanks) | **Done.** Open factory hall with working machines, shredder cogs, new dump ground, flying items, coin bursts, dust and exhaust, scenery past the map edge |
 
 Then the progression work (P1 hook, P2 reveal) is built on top in 3D, so unlock moments, the Scrap Dealer and juice are only made once.
 

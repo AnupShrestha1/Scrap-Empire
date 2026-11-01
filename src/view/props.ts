@@ -77,6 +77,10 @@ export const ITEM_HEIGHT: Readonly<Record<ItemId, number>> = {
   can: 0.24,
 };
 
+export function itemGeometry(item: ItemId): THREE.BufferGeometry {
+  return ITEM_GEOMETRY[item];
+}
+
 export function itemMesh(item: ItemId): THREE.Mesh {
   return mesh(ITEM_GEOMETRY[item], ITEM_COLORS[item]);
 }

@@ -8,8 +8,12 @@ import { Character } from './character';
 import { FieldView } from './field';
 import { buildGround } from './ground';
 import { Labels } from './labels';
+import { ITEM_IDS } from '../data/items';
+import { PLAYER_PLACE } from '../sim/events';
+import { centre, type View } from './common';
+import { Flyers, Puffs, type Target } from './fx';
 import { RingGauge } from './props';
-import { centre, createStationViews, HintArrow, StaffView, type BinView, type View } from './stations';
+import { createStationViews, HintArrow, StaffView, type StationViews } from './stations';
 
 /** Pick-ups closer together than this keep a combo going. */
 const COMBO_WINDOW_MS = 700;
@@ -26,7 +30,12 @@ export class World {
   private readonly charge = new RingGauge();
   private readonly views: View[] = [];
   private readonly staff: StaffView;
-  private readonly bins: Map<string, BinView>;
+  private readonly stations: StationViews;
+  /** Dust on the ground, and exhaust and build smoke. */
+  private readonly dust = new Puffs(0xd9c29a);
+  private readonly smoke = new Puffs(0xcfd3da);
+  private readonly flyers = new Flyers(ITEM_IDS);
+  private dustWait = 0;
   private readonly simEvents: SimEvent[] = [];
   /** Cash earned per station this frame, shown as one floating "+$" each. */
   private readonly sales = new Map<string, number>();
@@ -62,12 +71,11 @@ export class World {
     this.staff = new StaffView(this.scene, models);
     const dump = sim.stations.find((s) => s.kind === 'dump');
     if (!dump || dump.kind !== 'dump') throw new Error('The yard has no dump site');
-    const field = new FieldView(this.scene, models, this.labels, dump, (at) => this.nearestWorker(at));
-    const stations = createStationViews(this.scene, models, this.labels, sim.stations);
-    this.bins = stations.bins;
+    const field = new FieldView(this.scene, models, this.labels, dump, (at) => this.nearestWorker(at), this.dust);
+    this.stations = createStationViews(this.scene, models, this.labels, sim.stations, this.smoke);
     const hint = new HintArrow(sim.stations, () => ctx.settings.value.hints);
-    this.views.push(field, this.staff, ...stations.views, hint);
-    this.scene.add(this.player.root, this.charge.root, hint.root);
+    this.views.push(field, this.staff, ...this.stations.views, hint);
+    this.scene.add(this.player.root, this.charge.root, hint.root, this.dust.root, this.smoke.root, this.flyers.root);
 
     window.addEventListener('resize', () => this.resize());
     parent.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -121,8 +129,12 @@ export class World {
     const px = prevPlayer.x + (state.player.x - prevPlayer.x) * alpha;
     const py = prevPlayer.y + (state.player.y - prevPlayer.y) * alpha;
     this.player.update(dt, px, py, state.player.stack);
+    this.kickUpDust(dt, px, py);
     this.follow(px, py, dt);
     for (const view of this.views) view.update(sim, dt, time, this.camera);
+    this.dust.update(dt);
+    this.smoke.update(dt);
+    this.flyers.update(dt);
     // Over the head, facing the camera.
     this.charge.set(sim.padCharge);
     this.charge.root.position.set(px, 2.2, py);
@@ -165,6 +177,50 @@ export class World {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Little puffs at the player's feet while running. */
+  private kickUpDust(dt: number, x: number, z: number): void {
+    this.dustWait -= dt;
+    if (this.player.speed < 3 || this.dustWait > 0) return;
+    this.dustWait = 0.14;
+    this.dust.add(new THREE.Vector3(x + (Math.random() - 0.5) * 0.3, 0.05, z + 0.15), 0.22, 0.4, 0.2);
+  }
+
+  /** A worker by place name ('player' or 'staff-<id>'), if that's what the place is. */
+  private worker(place: string): ReturnType<StaffView['byId']> {
+    if (place === PLAYER_PLACE) return this.player;
+    const m = /^staff-(\d+)$/.exec(place);
+    return m ? this.staff.byId(this.ctx.sim, Number(m[1])) : undefined;
+  }
+
+  /**
+   * Where an item moving from or to `place` appears to go: a worker's stack, a machine's mouth or
+   * pallet, a bin, a truck's back. Undefined for places that animate items themselves (the dump site).
+   */
+  private placePoint(place: string, incoming: boolean): Target | undefined {
+    const who = this.worker(place);
+    if (who) return who;
+    const { shredders, bins, bays, factory } = this.stations;
+    const shredder = shredders.get(place);
+    if (shredder) return incoming ? shredder.inputPoint : shredder.outputPoint;
+    const bin = bins.get(place);
+    if (bin) return bin.point;
+    const bay = bays.get(place);
+    if (bay) return bay.loadPoint;
+    if (factory) return incoming ? factory.machinePoint(place) : factory.outputPoint(place);
+    return undefined;
+  }
+
+  /** Shows an item moving between two places as a flying item; the receiving worker squashes. */
+  private showMove(item: (typeof ITEM_IDS)[number], from: string, to: string): void {
+    const start = this.placePoint(from, false);
+    const end = this.placePoint(to, true);
+    const target = this.worker(to);
+    if (target) target.squash();
+    if (!start || !end) return;
+    const at = start instanceof THREE.Vector3 ? start : start.stackTop(new THREE.Vector3());
+    this.flyers.launch(item, at, end);
+  }
+
   /** The worker (player or employee) nearest a point: where a collected piece flies to. */
   private nearestWorker(at: THREE.Vector3): Character {
     let best = this.player;
@@ -187,6 +243,7 @@ export class World {
         // Pick-ups from the dump site have their own pop (see 'pickedUp').
         if (event.to === 'player' && event.from !== 'dump') sfx.play('pickup');
         else if (event.from === 'player') sfx.play('drop');
+        this.showMove(event.item, event.from, event.to);
         break;
       case 'pickedUp': {
         // Quick pick-ups in a row climb in pitch, so sweeping a cluster sings.
@@ -199,11 +256,20 @@ export class World {
       case 'dropped':
         sfx.play('drop');
         break;
-      case 'processed':
+      case 'processed': {
         sfx.play('chunk');
+        const shredder = this.stations.shredders.get(event.station);
+        if (shredder) this.dust.add(shredder.inputPoint, 0.5, 0.5, 0.4);
+        else {
+          // A product rolls out of the line onto its pallet.
+          const from = this.stations.factory?.machinePoint(event.station);
+          const to = this.stations.factory?.outputPoint(event.station);
+          if (from && to) this.flyers.launch(event.item, from, to);
+        }
         break;
+      }
       case 'storageFull':
-        this.bins.get(event.station)?.flash();
+        this.stations.bins.get(event.station)?.flash();
         toasts.show(t('toast.storageFull', { item: itemName(event.item) }), 'warn');
         sfx.play('warn');
         break;
@@ -221,6 +287,7 @@ export class World {
         break;
       case 'objectiveDone':
         toasts.show(t('toast.objectiveDone', { reward: event.reward }), 'good');
+        this.labels.coinBurst(this.player.root.position.clone().setY(1.5), this.camera, this.width, this.height, event.reward);
         sfx.play('objective');
         break;
       case 'built': {
@@ -253,7 +320,10 @@ export class World {
         toasts.show(t('toast.orderFilled', { value: event.value }), 'good');
         sfx.play('upgrade');
         const bay = sim.stations.find((s) => s.id === event.bay);
-        if (bay) this.labels.floating(`+$${event.value}`, centre(bay.rect, 2.4));
+        if (bay) {
+          this.labels.floating(`+$${event.value}`, centre(bay.rect, 2.4));
+          this.labels.coinBurst(centre(bay.rect, 1.5), this.camera, this.width, this.height, event.value);
+        }
         break;
       }
       case 'orderExpired':
@@ -275,5 +345,6 @@ export class World {
     if (!def) return;
     const at = def.kind === 'bin' ? def.zones.sell : def.rect;
     this.labels.floating(`+$${value}`, centre(at, 1.4));
+    this.labels.coinBurst(centre(at, 0.5), this.camera, this.width, this.height, value);
   }
 }

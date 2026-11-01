@@ -5,6 +5,7 @@ import type { Simulation } from '../sim/simulation';
 import type { DumpDef } from '../sim/stations';
 import { bake, fitToFootprint, type ModelKey, type Models } from './assets';
 import type { Character } from './character';
+import type { Puffs } from './fx';
 import type { Label, Labels } from './labels';
 import { hash, itemMesh, mat, setText } from './props';
 
@@ -59,6 +60,7 @@ export class FieldView {
     def: DumpDef,
     /** Who a collected piece flies to: the worker nearest a point. */
     private readonly nearest: (at: THREE.Vector3) => Character,
+    private readonly dust: Puffs,
   ) {
     PIECE_KINDS.forEach((kind, i) => {
       const { geometry, material } = bake(template(models, kind.id, kind.item));
@@ -85,8 +87,11 @@ export class FieldView {
         // Pieces already there at the start just appear; new ones tumble out of the truck one by one.
         age = this.primed ? -hash(piece.id, 3) * 0.4 : 1;
       }
+      const before = age;
       age += dt;
       this.age.set(piece.id, age);
+      // A little dust where a delivered piece lands.
+      if (before < FALL_S && age >= FALL_S) this.dust.burst(new THREE.Vector3(piece.x, 0, piece.y), 3, 0.25);
       this.last.set(piece.id, { kind: piece.kind, x: piece.x, y: piece.y });
       this.p.set(piece.x, dropHeight(age), piece.y);
       this.place(piece.kind, counts, hash(piece.id, 1) * Math.PI * 2, 1);

@@ -15,6 +15,7 @@ interface Floater {
 }
 
 const FLOAT_S = 0.9;
+const MAX_COINS = 8;
 
 /**
  * World-pinned DOM text (prices, orders, "+$12"). HTML text stays sharp and readable at any canvas
@@ -48,6 +49,48 @@ export class Labels {
     el.textContent = text;
     this.layer.append(el);
     this.floaters.push({ el, at: at.clone(), age: 0 });
+  }
+
+  /**
+   * Coins that pop out of a world point and fly into the HUD's cash counter, which bumps as they land.
+   * More money, more coins (up to `MAX_COINS`).
+   */
+  coinBurst(at: THREE.Vector3, camera: THREE.Camera, width: number, height: number, value: number): void {
+    const target = document.querySelector('.hud-coin');
+    if (!target) return;
+    this.v.copy(at).project(camera);
+    if (this.v.z > 1) return;
+    const sx = (this.v.x * 0.5 + 0.5) * width;
+    const sy = (-this.v.y * 0.5 + 0.5) * height;
+    const layerBox = this.layer.getBoundingClientRect();
+    const box = target.getBoundingClientRect();
+    const tx = box.left + box.width / 2 - layerBox.left;
+    const ty = box.top + box.height / 2 - layerBox.top;
+    const count = Math.max(1, Math.min(MAX_COINS, Math.round(Math.sqrt(value))));
+    for (let i = 0; i < count; i++) {
+      const coin = document.createElement('div');
+      coin.className = 'fly-coin';
+      this.layer.append(coin);
+      // Pop outwards first, then sweep to the counter.
+      const a = Math.random() * Math.PI * 2;
+      const pop = 18 + Math.random() * 22;
+      const delay = i * 40;
+      coin.animate(
+        [
+          { transform: `translate(${sx}px, ${sy}px) scale(0.4)` },
+          { transform: `translate(${sx + Math.cos(a) * pop}px, ${sy + Math.sin(a) * pop - 20}px) scale(1)`, offset: 0.3 },
+          { transform: `translate(${tx}px, ${ty}px) scale(0.7)` },
+        ],
+        { duration: 650, delay, easing: 'cubic-bezier(0.5, 0, 0.75, 0)', fill: 'backwards' },
+      ).onfinish = () => {
+        coin.remove();
+        const chip = target.closest('.hud-chip');
+        chip?.classList.remove('bump');
+        // Restart the bump animation.
+        void (chip as HTMLElement | null)?.offsetWidth;
+        chip?.classList.add('bump');
+      };
+    }
   }
 
   update(camera: THREE.Camera, width: number, height: number, dt: number): void {

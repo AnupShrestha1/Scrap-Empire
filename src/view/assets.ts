@@ -17,11 +17,21 @@ export const MODEL_FILES = {
   nut: 'car-kit/debris-nut.glb',
   hopper: 'factory-kit/hopper-high-square.glb',
   machine: 'factory-kit/machine-fortified.glb',
+  pressMachine: 'factory-kit/machine.glb',
+  piston: 'factory-kit/piston-round.glb',
+  robotArm: 'factory-kit/robot-arm-a.glb',
+  cog: 'factory-kit/cog-a.glb',
+  screen: 'factory-kit/screen-panel-wide.glb',
   crateLarge: 'factory-kit/box-large.glb',
   crateSmall: 'factory-kit/box-small.glb',
-  factory: 'city-kit-industrial/building-f.glb',
   hut: 'city-kit-industrial/building-k.glb',
   chimney: 'city-kit-industrial/chimney-large.glb',
+  office: 'city-kit-industrial/building-a.glb',
+  tank: 'city-kit-industrial/detail-tank-large.glb',
+  waterTower: 'city-kit-industrial/water-tower.glb',
+  containerA: 'city-kit-industrial/shipping-container-a.glb',
+  containerB: 'city-kit-industrial/shipping-container-b.glb',
+  containerC: 'city-kit-industrial/shipping-container-c.glb',
 } as const;
 
 export type ModelKey = keyof typeof MODEL_FILES;
@@ -42,7 +52,7 @@ export async function loadModels(onProgress?: (done: number) => void): Promise<M
   const entries = await Promise.all(
     keys.map(async (key) => {
       const gltf = await loader.loadAsync(base + MODEL_FILES[key]);
-      prepare(gltf);
+      prepare(gltf, MODEL_FILES[key].split('/')[0]!);
       onProgress?.(++loaded / keys.length);
       return [key, gltf] as const;
     }),
@@ -64,9 +74,20 @@ export async function loadModels(onProgress?: (done: number) => void): Promise<M
 }
 
 /** Shadows on, and crisp sampling of Kenney's flat palette textures. */
-function prepare(gltf: GLTF): void {
+/**
+ * One material per Kenney pack: every model in a pack uses the same palette texture, so sharing the
+ * material lets static scenery merge into a few meshes (see `bake`).
+ */
+const packMaterials = new Map<string, THREE.Material>();
+
+function prepare(gltf: GLTF, pack: string): void {
   gltf.scene.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
+    if (!Array.isArray(node.material)) {
+      const shared = packMaterials.get(pack);
+      if (shared) node.material = shared;
+      else packMaterials.set(pack, node.material);
+    }
     node.castShadow = true;
     node.receiveShadow = true;
     const materials = Array.isArray(node.material) ? node.material : [node.material];

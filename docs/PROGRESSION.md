@@ -168,3 +168,10 @@ Offline earnings come after, as already planned.
 4. **Iron first:** aluminium at level 2, copper at level 4, turning off the equal-outputs testing switch?
 5. **Bigger numbers:** scale prices and costs about ×4?
 6. **Scripted first truck** the moment the Press makes its first sheets?
+
+## 7. Materials and recipes (user direction, 2026-11-01; to design in detail before P1)
+
+- **Iron only at first.** The shredder gives only iron until upgrades unlock more metals.
+- **Rarer metals are worth more.** Each new metal has a lower chance per scrap but a higher price. Upgrading Extraction raises the chance of the valuable ones.
+- **Single-metal lines:** 3 iron → 1 sheet; aluminium → 1 can (amount to set).
+- **Mixed recipes:** combining metals makes higher-value products, e.g. 2 iron + 1 aluminium → a product worth more than either. More such combinations follow.
