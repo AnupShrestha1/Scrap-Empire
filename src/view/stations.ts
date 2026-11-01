@@ -15,7 +15,8 @@ import { Character } from './character';
 import { centre, padTitle, type View } from './common';
 import { FactoryView } from './factory';
 import type { Puffs } from './fx';
-import type { Label, Labels } from './labels';
+import type { Label, LabelMaker, Labels } from './labels';
+import type { Reveal } from './reveal';
 import { BinProp, booth, lamp, LAMP_COLORS, PadProp, PileProp, RingGauge, setText } from './props';
 
 /** How long a bin's "full" warning stays highlighted. */
@@ -30,15 +31,24 @@ export interface StationViews {
 }
 
 /** One view per station, plus the supplier truck. */
-export function createStationViews(scene: THREE.Scene, models: Models, labels: Labels, stations: readonly StationDef[], smoke: Puffs): StationViews {
-  const out: StationViews = { views: [new SupplierTruckView(scene, models, labels, smoke)], bins: new Map(), shredders: new Map(), bays: new Map() };
+export function createStationViews(
+  world: THREE.Scene,
+  models: Models,
+  allLabels: Labels,
+  stations: readonly StationDef[],
+  smoke: Puffs,
+  reveal: Reveal,
+): StationViews {
+  const out: StationViews = { views: [new SupplierTruckView(world, models, allLabels, smoke)], bins: new Map(), shredders: new Map(), bays: new Map() };
   const { views, bins } = out;
   for (const s of stations) {
+    if (s.kind === 'dump') continue;
+    // Each station lives in its own group, shown, teased or hidden by business level (reveal.ts), and
+    // only updates while it's active.
+    const scene = reveal.groupFor(s);
+    const labels = allLabels.scoped(scene);
+    const first = views.length;
     switch (s.kind) {
-      case 'dump':
-        // The field itself is FieldView; here only the pad for putting scrap back.
-        scene.add(new PadProp(s.zones.return.w, s.zones.return.h, '↩', 0x8a6a48).placeOn(s.zones.return).root);
-        break;
       case 'processor': {
         const view = new ShredderView(scene, models, labels, s);
         out.shredders.set(s.id, view);
@@ -84,15 +94,32 @@ export function createStationViews(scene: THREE.Scene, models: Models, labels: L
         // A booth with a green awning; the gold pad in front buys every raw metal you carry.
         const stand = booth(0x2f8f57);
         stand.position.copy(centre(s.rect));
-        stand.rotation.y = Math.PI;
         const title = labels.add('area-title');
         title.at.copy(centre(s.rect, 2.4));
         title.el.textContent = t('dealer.title');
-        scene.add(new PadProp(s.zones.sell.w, s.zones.sell.h, '$', 0xc98a1e).placeOn(s.zones.sell).root, stand);
+        const stock = labels.add('pad-title');
+        stock.at.copy(centre(s.zones.stock, 0.7));
+        stock.el.textContent = t('dealer.stock');
+        scene.add(
+          new PadProp(s.zones.sell.w, s.zones.sell.h, '$', 0xc98a1e).placeOn(s.zones.sell).root,
+          new PadProp(s.zones.stock.w, s.zones.stock.h, '▦', 0xc98a1e).placeOn(s.zones.stock).root,
+          stand,
+        );
         break;
       }
     }
+    for (let i = first; i < views.length; i++) {
+      const view = views[i]!;
+      views[i] = {
+        update: (...args) => {
+          if (reveal.isActive(s.id)) view.update(...args);
+        },
+      };
+    }
   }
+  // The dump site's own view is FieldView; here only the pad for putting scrap back.
+  const dump = stations.find((s) => s.kind === 'dump');
+  if (dump?.kind === 'dump') world.add(new PadProp(dump.zones.return.w, dump.zones.return.h, '↩', 0x8a6a48).placeOn(dump.zones.return).root);
   return out;
 }
 
@@ -153,7 +180,7 @@ export class BayView implements View {
   private readonly patience: HTMLElement;
   private readonly exhaust: Exhaust;
 
-  constructor(scene: THREE.Scene, models: Models, labels: Labels, private readonly def: BayDef, smoke: Puffs) {
+  constructor(scene: THREE.Object3D, models: Models, labels: LabelMaker, private readonly def: BayDef, smoke: Puffs) {
     this.exhaust = new Exhaust(smoke);
     this.truck = new THREE.Group().add(fitToFootprint(models.get('buyerTruck'), 3));
     this.truck.rotation.y = Math.PI / 2;
@@ -203,7 +230,7 @@ export class ShredderView implements View {
   private readonly ring = new RingGauge(0x5cc84a, 0.8);
   private readonly note: Label;
 
-  constructor(scene: THREE.Scene, models: Models, labels: Labels, private readonly def: ProcessorDef) {
+  constructor(scene: THREE.Object3D, models: Models, labels: LabelMaker, private readonly def: ProcessorDef) {
     const machine = fitToFootprint(models.get('machine'), 2.1);
     const hopper = fitToFootprint(models.get('hopper'), 1.4);
     hopper.position.y += 1.6;
@@ -259,7 +286,7 @@ export class BinView implements View {
   private readonly label: Label;
   private flashUntil = 0;
 
-  constructor(scene: THREE.Scene, labels: Labels, private readonly def: BinDef) {
+  constructor(scene: THREE.Object3D, labels: LabelMaker, private readonly def: BinDef) {
     this.prop = new BinProp(def.item);
     this.prop.root.position.copy(centre(def.rect));
     scene.add(this.prop.root);
@@ -300,7 +327,7 @@ export class BinView implements View {
 class CashPadView implements View {
   private readonly title: Label;
 
-  constructor(scene: THREE.Scene, labels: Labels, private readonly def: CashPadDef) {
+  constructor(scene: THREE.Object3D, labels: LabelMaker, private readonly def: CashPadDef) {
     scene.add(new PadProp(1, 1, '$').placeOn(def.rect).root);
     this.title = labels.add('pad-title');
     this.title.at.copy(centre(def.rect, 0.7));
@@ -340,7 +367,7 @@ export function lineName(sim: Simulation, lineId: string): string {
 class StaffHutView implements View {
   private readonly title: Label;
 
-  constructor(scene: THREE.Scene, models: Models, labels: Labels, private readonly def: StaffHutDef) {
+  constructor(scene: THREE.Object3D, models: Models, labels: LabelMaker, private readonly def: StaffHutDef) {
     const hut = new THREE.Group().add(fitToFootprint(models.get('hut'), 2.2));
     hut.position.copy(centre(def.rect));
     scene.add(hut, new PadProp(def.zones.hire.w, def.zones.hire.h, '+', 0x3a7bd5).placeOn(def.zones.hire).root);

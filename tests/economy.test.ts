@@ -3,6 +3,7 @@ import { BUSINESS_LEVELS, businessLevel, METAL_FINDS, PRICES, SHREDDER } from '.
 import { METALS } from '../src/data/items';
 import { STATIONS, YARD } from '../src/data/layout';
 import { PURCHASE, requiredLevel } from '../src/data/upgrades';
+import { levelChest } from '../src/data/unlocks';
 import { memoryStorage } from '../src/platform/memoryStorage';
 import { SAVE_KEYS, SaveManager } from '../src/save/saveManager';
 import { lineBatchTicks, processorCycleTicks, shredderFinds, unlockedMetals } from '../src/sim/effective';
@@ -130,7 +131,20 @@ describe('business level', () => {
     for (let i = 0; i < 12; i++) sim.advance(250);
     const events: SimEvent[] = [];
     sim.drainEvents(events);
-    expect(events).toContainEqual({ type: 'levelUp', level: 2 });
+    expect(events).toContainEqual({ type: 'levelUp', level: 2, chest: levelChest(2) });
+  });
+
+  it('pays a chest per level reached, without counting it as earnings', () => {
+    const state = createNewGame(grid, STATIONS);
+    state.earned = BUSINESS_LEVELS[3]! - 1;
+    state.player.stack = ['iron'];
+    const dealer = STATIONS.find((d): d is DealerDef => d.kind === 'dealer')!;
+    state.player.x = dealer.zones.sell.x + 0.5;
+    state.player.y = dealer.zones.sell.y + 0.5;
+    const sim = new Simulation(state, grid, STATIONS, 'dump');
+    for (let i = 0; i < 12; i++) sim.advance(250);
+    expect(state.money).toBe(PRICES.iron + levelChest(4));
+    expect(state.earned).toBe(BUSINESS_LEVELS[3]! - 1 + PRICES.iron);
   });
 });
 

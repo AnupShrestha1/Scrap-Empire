@@ -29,9 +29,10 @@ export interface UpgradeDef {
 export const UPGRADES: Readonly<Record<UpgradeId, UpgradeDef>> = {
   carry: { cost: 50, growth: 1.6, maxLevel: 8 },
   magnet: { cost: 100, growth: 1.6, maxLevel: 6 },
-  shredderSpeed: { cost: 160, growth: 1.5, maxLevel: 8 },
-  binSize: { cost: 140, growth: 1.5, maxLevel: 8 },
-  supply: { cost: 240, growth: 1.7, maxLevel: 8 },
+  // Business levels here match when each pad appears (unlocks.ts).
+  shredderSpeed: { cost: 160, growth: 1.5, maxLevel: 8, requiresLevel: 2 },
+  binSize: { cost: 140, growth: 1.5, maxLevel: 8, requiresLevel: 2 },
+  supply: { cost: 240, growth: 1.7, maxLevel: 8, requiresLevel: 3 },
   shredderYield: { cost: 500, growth: 1.6, maxLevel: 6, requiresLevel: 3 },
   // Levels 1, 3, 5 and 7 unlock copper, titanium, gold and platinum (balance.ts METAL_FINDS).
   extraction: { cost: 600, growth: 1.75, maxLevel: 8, levelGates: [3, 4, 5, 5, 6, 6, 7, 7] },

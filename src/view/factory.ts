@@ -8,7 +8,7 @@ import type { FactoryDef, LineDef } from '../sim/stations';
 import { batchTicks, lineStatus, missingInput, nextUnbuiltLine } from '../sim/systems/manufacturing';
 import { fitToFootprint, type Models } from './assets';
 import type { Puffs } from './fx';
-import type { Label, Labels } from './labels';
+import type { Label, LabelMaker } from './labels';
 import { lamp, LAMP_COLORS, mat, PadProp, PileProp, RingGauge, setText } from './props';
 import { centre, padTitle, type View } from './common';
 
@@ -54,7 +54,7 @@ export class FactoryView implements View {
   private readonly lines: LineParts[] = [];
   private primed = false;
 
-  constructor(scene: THREE.Scene, models: Models, labels: Labels, private readonly def: FactoryDef, private readonly puffs: Puffs) {
+  constructor(scene: THREE.Object3D, models: Models, labels: LabelMaker, private readonly def: FactoryDef, private readonly puffs: Puffs) {
     const { x, y, w, h } = def.rect;
     scene.add(hall(x, y, w, h));
     const chimney = fitToFootprint(models.get('chimney'), 1.1);

@@ -19,6 +19,8 @@ export class Hud {
   private readonly cash: HTMLSpanElement;
   private readonly level: HTMLSpanElement;
   private readonly levelFill: HTMLSpanElement;
+  /** What the next business level opens, under the level bar. */
+  private readonly next: HTMLSpanElement;
   private readonly objective: HTMLDivElement;
   private readonly objectiveText: HTMLSpanElement;
   private readonly objectiveCount: HTMLSpanElement;
@@ -46,7 +48,8 @@ export class Hud {
     const track = el('span', 'hud-level-track');
     this.levelFill = el('span', 'hud-level-fill');
     track.append(this.levelFill);
-    levelChip.append(this.level, track);
+    this.next = el('span', 'hud-next');
+    levelChip.append(this.level, track, this.next);
     const chips = el('div', 'hud-chips');
     chips.append(chip, levelChip);
 
@@ -86,6 +89,7 @@ export class Hud {
     const from = BUSINESS_LEVELS[level - 1] ?? 0;
     const to = BUSINESS_LEVELS[level];
     this.levelFill.style.width = to === undefined ? '100%' : `${Math.round(((state.earned - from) / (to - from)) * 100)}%`;
+    this.next.textContent = to === undefined ? '' : t('hud.next', { what: t(`next.${level + 1}` as StringKey) });
     this.objective.hidden = !objective;
     if (!objective) return;
     this.objectiveText.textContent = t(`objective.${objective.id}` as StringKey);

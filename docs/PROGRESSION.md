@@ -1,6 +1,6 @@
 # Scrap Empire — Progression Design
 
-Approved 2026-11-01. P1 is built; P2 is next.
+Approved 2026-11-01. P1 and P2 are built.
 
 **Goal:** a new CrazyGames player is hooked within the first minute and has seen every core system (collect, process, sell, upgrade, automate, manufacture, deliver) within about six minutes. After that, the game keeps a steady drip of new things to want.
 
@@ -158,7 +158,7 @@ The objective chain is rewritten around the beats in section 3. Each objective p
 Small enough to take in two steps, each checked with the balance runner against the targets in section 3:
 
 - **P1 — Hook and economy (built 2026-11-01):** Scrap Dealer, the six metals and Extraction (section 7), line slots with recipe pads and the twelve products, six bins, business levels 1–8, warm shredder, bigger numbers, rewritten early objectives, free first employee, scripted first truck.
-- **P2 — Reveal and milestones:** hidden, teased and active states, unlock moments (camera pan, fence drop), level chests and banners, "Next unlock" HUD, rotating goals. (Coin juice is already in from R2.)
+- **P2 — Reveal and milestones (built 2026-11-01):** hidden, teased and active states, unlock moments (camera pan, fence drop), level chests and banners, "Next unlock" HUD, rotating goals. (Coin juice is already in from R2.)
 
 Offline earnings come after, as already planned.
 
@@ -253,4 +253,13 @@ From `npm run balance` (a bot that plays well but not perfectly):
 | Copper (Extraction 1) | ~8:00 | 16:28 |
 
 Changes made while tuning: business level thresholds lowered (see 7.4), supply 10 scrap every 16 s, the staff hut opens at business level 2, and "store metal" moved after the first line (bins have no use before it). The bot spends on cheap upgrades before Extraction and line 2, so those come later than a player chasing objectives would get them; worth checking by playing.
+
+### 7.7 P2 as built
+
+- Reveal levels per station are in `src/data/unlocks.ts`; the simulation gates the same things (Shredder speed and Bin size at level 2, Supply at 3, the second loading bay at 4). Solid stations (factory, bins, hut) are never fully hidden: before their level they stand as dark silhouettes with a level sign.
+- Level chests: $100, $250, $600, $1,500, $4,000, $10,000, $25,000 for levels 2–8, paid as cash but not counted as earnings.
+- Each level-up shows a banner with what it opened and the chest, the camera swings to the biggest thing unlocked for about 2 s, and it pops in with a puff.
+- The HUD's level chip says what the next level opens.
+- After the objective chain, goals rotate (truck orders, shredding, products, rare finds), each round bigger and better paid.
+- A "Sell storage" pad beside the Scrap Dealer sells metal straight from the bins, fullest bin first (user request).
 

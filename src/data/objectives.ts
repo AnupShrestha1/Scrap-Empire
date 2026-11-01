@@ -95,3 +95,23 @@ export const OBJECTIVES: readonly ObjectiveDef[] = [
   { id: 'reachLevel7', target: 1, reward: 10000, done: level(7) },
   { id: 'unlockPlatinum', target: 1, reward: 20000, done: extraction(7), hint: { station: 'pad-extraction', zone: 'buy' } },
 ];
+
+/** After the chain: goals that cycle through these, each round bigger and better paid. */
+const GOALS: readonly { id: string; target: number; counts: (e: SimEvent) => number }[] = [
+  { id: 'goalOrders', target: 4, counts: (e) => +(e.type === 'orderFilled') },
+  { id: 'goalShred', target: 150, counts: (e) => +(e.type === 'processed' && e.station === 'shredder') },
+  { id: 'goalProducts', target: 40, counts: (e) => +(e.type === 'processed' && e.station.startsWith('line-')) },
+  { id: 'goalRare', target: 6, counts: (e) => +(e.type === 'found' && e.item !== 'aluminium' && e.item !== 'copper') },
+];
+
+/** The `n`th goal after the chain (0-based). */
+export function rotatingGoal(n: number): ObjectiveDef {
+  const goal = GOALS[n % GOALS.length]!;
+  const round = Math.floor(n / GOALS.length);
+  return {
+    id: goal.id,
+    target: Math.round(goal.target * (1 + round * 0.5)),
+    reward: Math.round((5000 * 1.5 ** round) / 100) * 100,
+    counts: goal.counts,
+  };
+}

@@ -15,7 +15,7 @@ import { randomKind, scatterPiece } from './field';
  * Zones that sell, spend or open something: they wait for PURCHASE.delayS of standing still, shown by a
  * filling ring.
  */
-const CHARGED_ZONES: ReadonlySet<string> = new Set(['sell', 'buy', 'build', 'hire', 'recipes']);
+const CHARGED_ZONES: ReadonlySet<string> = new Set(['sell', 'stock', 'buy', 'build', 'hire', 'recipes']);
 
 /**
  * How far (0..1) the player is through the stand-still before a sell, upgrade or build pad acts, or
@@ -65,7 +65,7 @@ export function stepInteraction(
     inter.dwell = 0;
     inter.warned = false;
   } else if (hit) {
-    const rate = hit.zone === 'sell' ? SELL_PER_S : CARRY.transferPerS;
+    const rate = hit.zone === 'sell' || hit.zone === 'stock' ? SELL_PER_S : CARRY.transferPerS;
     inter.budget = Math.min(1, inter.budget + rate / SIM.tickRate);
     inter.dwell++;
   }
@@ -251,6 +251,23 @@ function transferOne(
       state.money += PRICES[item];
       state.earned += PRICES[item];
       events.push({ type: 'sold', station: id, item, value: PRICES[item] });
+      return true;
+    }
+
+    case 'stock': {
+      // Sells metal straight from the bins, the fullest bin first, after the usual stand-still.
+      if (inter.dwell < secondsToTicks(PURCHASE.delayS)) return false;
+      let fullest: BinDef | undefined;
+      for (const s of stations) {
+        if (s.kind !== 'bin' || state.bins[s.id]!.count === 0) continue;
+        if (!fullest || state.bins[s.id]!.count > state.bins[fullest.id]!.count) fullest = s;
+      }
+      if (!fullest) return false;
+      state.bins[fullest.id]!.count--;
+      const value = PRICES[fullest.item];
+      state.money += value;
+      state.earned += value;
+      events.push({ type: 'sold', station: id, item: fullest.item, value });
       return true;
     }
 

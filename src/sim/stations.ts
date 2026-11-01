@@ -70,15 +70,17 @@ export interface FactoryDef extends StationBase {
   zones: { build: Rect; recipes: Rect };
 }
 
-/** The Scrap Dealer: buys every raw metal the player carries. */
+/** The Scrap Dealer: `sell` buys every raw metal the player carries; `stock` sells metal from the bins. */
 export interface DealerDef extends StationBase {
   kind: 'dealer';
-  zones: { sell: Rect };
+  zones: { sell: Rect; stock: Rect };
 }
 
 /** A loading bay lane: buyer trucks back in to `lane.parkX` on `lane.row`; load them from `zones.load`. */
 export interface BayDef extends StationBase {
   kind: 'bay';
+  /** Business level before trucks use this lane. */
+  requiresLevel?: number;
   lane: { row: number; parkX: number; startX: number };
   zones: { load: Rect };
 }
@@ -112,6 +114,7 @@ export type ZoneHit =
   | { station: FactoryDef; zone: 'build' }
   | { station: FactoryDef; zone: 'recipes' }
   | { station: DealerDef; zone: 'sell' }
+  | { station: DealerDef; zone: 'stock' }
   | { station: FactoryDef; zone: 'lineOutput'; line: LineDef }
   | { station: BayDef; zone: 'load' }
   | { station: OutletDef; zone: 'sell' }
@@ -155,6 +158,7 @@ export function zoneAt(stations: readonly StationDef[], x: number, y: number): Z
         break;
       case 'dealer':
         if (inRect(s.zones.sell, x, y)) return { station: s, zone: 'sell' };
+        if (inRect(s.zones.stock, x, y)) return { station: s, zone: 'stock' };
         break;
     }
   }

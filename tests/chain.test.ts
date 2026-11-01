@@ -37,7 +37,7 @@ const STATIONS: StationDef[] = [
     rect: { x: 7, y: 0, w: 1, h: 1 },
     zones: { deposit: { x: 7, y: 1, w: 1, h: 1 } },
   },
-  { id: 'dealer', kind: 'dealer', rect: { x: 8, y: 3, w: 1, h: 1 }, zones: { sell: { x: 6, y: 0, w: 1, h: 1 } } },
+  { id: 'dealer', kind: 'dealer', rect: { x: 8, y: 3, w: 1, h: 1 }, zones: { sell: { x: 6, y: 0, w: 1, h: 1 }, stock: { x: 6, y: 3, w: 1, h: 1 } } },
 ];
 const grid = parseGrid(['.........', '.........', '.........', 'P........'], STATIONS);
 const DT = 0.05;
@@ -176,6 +176,17 @@ describe('carrying', () => {
 });
 
 describe('the Scrap Dealer', () => {
+  it('sells metal straight from storage on its stock pad, the fullest bin first', () => {
+    const state = emptyGame();
+    state.bins.bin!.count = 3;
+    standIn(state, 6, secondsToTicks(PURCHASE.delayS) - 1, [], 3);
+    expect(state.bins.bin!.count).toBe(3);
+    const events = standIn(state, 6, 80, [], 3);
+    expect(state.bins.bin!.count).toBe(0);
+    expect(state.money).toBe(3 * PRICES.iron);
+    expect(events.filter((e) => e.type === 'sold')).toHaveLength(3);
+  });
+
   it('buys carried metal one item at a time after a stand-still, and nothing else', () => {
     const state = emptyGame();
     state.player.stack = ['iron', 'scrap', 'iron', 'sheet', 'gold'];

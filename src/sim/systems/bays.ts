@@ -1,4 +1,4 @@
-import { ORDERS, PRICES } from '../../data/balance';
+import { businessLevel, ORDERS, PRICES } from '../../data/balance';
 import type { ItemId } from '../../data/items';
 import type { SimEvent } from '../events';
 import { secondsToTicks, type BayState, type GameState } from '../state';
@@ -41,6 +41,7 @@ export function orderValue(bay: BayState): number {
 export function stepBay(def: BayDef, bay: BayState, state: GameState, factories: readonly FactoryDef[], events: SimEvent[]): boolean {
   switch (bay.phase) {
     case 'empty': {
+      if (def.requiresLevel && businessLevel(state.earned) < def.requiresLevel) return false;
       // The very first product brings a truck straight away, wanting just a few: the bay explains itself.
       const first = state.firstOrder ? undefined : firstProduct(factories, state);
       if (first) {

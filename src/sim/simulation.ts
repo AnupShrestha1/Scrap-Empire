@@ -12,6 +12,7 @@ import { newInteractionState, padCharge, stepInteraction, type InteractionState 
 import { stepPlayer } from './systems/player';
 import { processorCycleTicks, shredderFinds } from './effective';
 import { businessLevel } from '../data/balance';
+import { levelChest } from '../data/unlocks';
 import { stepObjectives } from './systems/objectives';
 import { processorStatus, stepProcessor } from './systems/processing';
 import { stepSupplier } from './systems/supplier';
@@ -118,6 +119,15 @@ export class Simulation {
     return this.accumulator / TICK_MS;
   }
 
+  /** Announces each business level passed between `from` and `to`, paying its chest. */
+  private levelUp(from: number, to: number): void {
+    for (let level = from + 1; level <= to; level++) {
+      const chest = levelChest(level);
+      this.state.money += chest;
+      this.events.push({ type: 'levelUp', level, chest });
+    }
+  }
+
   /** The zone the player is standing in ("stationId:zone"), if any. */
   get zone(): string | null {
     return this.interaction.zoneKey;
@@ -187,11 +197,10 @@ export class Simulation {
       changed = stepBay(bay, state.bays[bay.id]!, state, this.factories, events) || changed;
     }
     const levelAfter = businessLevel(state.earned);
-    if (levelAfter > levelBefore) events.push({ type: 'levelUp', level: levelAfter });
+    this.levelUp(levelBefore, levelAfter);
     // Objectives look at this tick's events only (earlier ones may not have been drained yet).
     changed = stepObjectives(state, events.slice(firstEvent), events) || changed;
-    const levelAfterRewards = businessLevel(state.earned);
-    if (levelAfterRewards > levelAfter) events.push({ type: 'levelUp', level: levelAfterRewards });
+    this.levelUp(levelAfter, businessLevel(state.earned));
     if (changed) this.dirty = true;
     state.tick++;
   }

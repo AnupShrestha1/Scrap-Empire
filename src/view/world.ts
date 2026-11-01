@@ -15,8 +15,16 @@ import { Flyers, Puffs, type Target } from './fx';
 import { RingGauge } from './props';
 import { createStationViews, HintArrow, lineName, StaffView, type StationViews } from './stations';
 import { RecipeCard } from '../ui/recipes';
+import { Banner } from '../ui/banner';
+import { Reveal } from './reveal';
+import { businessLevel } from '../data/balance';
+import type { StringKey } from '../i18n';
 import { unlockedMetals } from '../sim/effective';
 import type { MetalId } from '../data/items';
+
+/** How long the camera looks at something newly unlocked, and how fast it swings there. */
+const PAN_S = 2.4;
+const PAN_RATE = 3;
 
 /** Pick-ups closer together than this keep a combo going. */
 const COMBO_WINDOW_MS = 700;
@@ -41,6 +49,10 @@ export class World {
   /** Golden sparkle where a rare metal turns up. */
   private readonly sparkle = new Puffs(0xffe27a, 60);
   private readonly recipeCard: RecipeCard;
+  private readonly reveal: Reveal;
+  private readonly banner: Banner;
+  /** While set, the camera looks here instead of at the player (an unlock moment). */
+  private pan: { at: THREE.Vector3; left: number } | null = null;
   /** Metals the shredder can find; a new one gets a toast. */
   private unlocked: Set<MetalId>;
   /** Finds announced so far this session, per metal (common ones only for the first few). */
@@ -82,7 +94,10 @@ export class World {
     const dump = sim.stations.find((s) => s.kind === 'dump');
     if (!dump || dump.kind !== 'dump') throw new Error('The yard has no dump site');
     const field = new FieldView(this.scene, models, this.labels, dump, (at) => this.nearestWorker(at), this.dust);
-    this.stations = createStationViews(this.scene, models, this.labels, sim.stations, this.smoke);
+    this.reveal = new Reveal(this.scene, this.labels, this.smoke);
+    this.stations = createStationViews(this.scene, models, this.labels, sim.stations, this.smoke, this.reveal);
+    this.reveal.update(businessLevel(sim.state.earned), 0);
+    this.banner = new Banner(uiLayer);
     const hint = new HintArrow(sim.stations, () => ctx.settings.value.hints);
     this.views.push(field, this.staff, ...this.stations.views, hint);
     this.scene.add(this.player.root, this.charge.root, hint.root, this.dust.root, this.smoke.root, this.flyers.root, this.sparkle.root);
@@ -150,6 +165,12 @@ export class World {
     this.flyers.update(dt);
     this.recipeCard.update();
     this.announceUnlocks();
+    const revealed = this.reveal.update(businessLevel(state.earned), dt);
+    if (revealed.length > 0) {
+      // Look at the biggest thing that just opened, for a moment.
+      const main = revealed.reduce((a, b) => (b.rect.w * b.rect.h > a.rect.w * a.rect.h ? b : a));
+      this.pan = { at: centre(main.rect), left: PAN_S };
+    }
     // Over the head, facing the camera.
     this.charge.set(sim.padCharge);
     this.charge.root.position.set(px, 2.2, py);
@@ -160,7 +181,15 @@ export class World {
   }
 
   private follow(x: number, z: number, dt: number): void {
-    const k = 1 - Math.exp(-VIEW.cameraFollowRate * dt);
+    if (this.pan) {
+      this.pan.left -= dt;
+      if (this.pan.left <= 0) this.pan = null;
+      else {
+        x = this.pan.at.x;
+        z = this.pan.at.z + VIEW.leadTiles;
+      }
+    }
+    const k = 1 - Math.exp(-(this.pan ? PAN_RATE : VIEW.cameraFollowRate) * dt);
     this.focus.x += (x - this.focus.x) * k;
     // Look a little ahead (north) of the player, so they sit below centre, clear of the HUD.
     this.focus.z += (z - VIEW.leadTiles - this.focus.z) * k;
@@ -346,7 +375,14 @@ export class World {
         sfx.play('warn');
         break;
       case 'levelUp':
-        toasts.show(t('toast.levelUp', { level: event.level }), 'good');
+        this.banner.show(
+          t('toast.levelUp', { level: event.level }),
+          t(`unlock.${event.level}` as StringKey),
+          event.chest > 0 ? t('banner.chest', { amount: event.chest.toLocaleString('en-US') }) : '',
+        );
+        if (event.chest > 0) {
+          this.labels.coinBurst(this.player.root.position.clone().setY(1.5), this.camera, this.width, this.height, event.chest);
+        }
         sfx.play('objective');
         break;
       case 'hired':

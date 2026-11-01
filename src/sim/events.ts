@@ -29,7 +29,8 @@ export type SimEvent =
   | { type: 'orderExpired'; bay: string }
   | { type: 'hired'; count: number }
   | { type: 'locked'; level?: number; line?: string }
-  | { type: 'levelUp'; level: number }
+  /** A new business level, with the cash from its chest (already added to money). */
+  | { type: 'levelUp'; level: number; chest: number }
   | { type: 'objectiveDone'; objective: string; reward: number }
   | { type: 'truckArriving' }
   | { type: 'truckWaiting' }

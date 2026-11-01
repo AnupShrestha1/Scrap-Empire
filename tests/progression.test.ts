@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CARRY, SHREDDER, SUPPLIER } from '../src/data/balance';
 import { STATIONS, YARD } from '../src/data/layout';
 import { OBJECTIVES } from '../src/data/objectives';
+import { currentObjective } from '../src/sim/systems/objectives';
 import { PURCHASE, UPGRADE_EFFECTS, UPGRADES, upgradeCost } from '../src/data/upgrades';
 import { memoryStorage } from '../src/platform/memoryStorage';
 import { SAVE_KEYS, SaveManager } from '../src/save/saveManager';
@@ -144,5 +145,19 @@ describe('save v3 → v4', () => {
     expect(state.upgrades.carry).toBe(0);
     expect(state.upgrades.extraction).toBe(0);
     expect(state.objectives).toEqual({ index: 0, progress: 0 });
+  });
+});
+
+describe('rotating goals', () => {
+  it('follow the objective chain, growing each round', () => {
+    const state = createNewGame(grid, STATIONS);
+    state.objectives.index = OBJECTIVES.length;
+    const first = currentObjective(state)!;
+    expect(first.id).toBe('goalOrders');
+    state.objectives.index = OBJECTIVES.length + 4;
+    const again = currentObjective(state)!;
+    expect(again.id).toBe('goalOrders');
+    expect(again.target).toBeGreaterThan(first.target);
+    expect(again.reward).toBeGreaterThan(first.reward);
   });
 });

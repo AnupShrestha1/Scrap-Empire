@@ -6,6 +6,13 @@ export interface Label {
   /** World position the label's bottom centre sits on. */
   readonly at: THREE.Vector3;
   visible: boolean;
+  /** Hidden along with this object (a station that isn't revealed yet). */
+  owner?: THREE.Object3D;
+}
+
+/** Anything that hands out labels: Labels itself, or a scope that ties them to an owner. */
+export interface LabelMaker {
+  add(className?: string): Label;
 }
 
 interface Floater {
@@ -21,7 +28,7 @@ const MAX_COINS = 8;
  * World-pinned DOM text (prices, orders, "+$12"). HTML text stays sharp and readable at any canvas
  * resolution, which matters at 800×450.
  */
-export class Labels {
+export class Labels implements LabelMaker {
   private readonly layer: HTMLDivElement;
   private readonly labels: Label[] = [];
   private floaters: Floater[] = [];
@@ -40,6 +47,17 @@ export class Labels {
     const label = { el, at: new THREE.Vector3(), visible: true };
     this.labels.push(label);
     return label;
+  }
+
+  /** A label maker whose labels hide whenever `owner` (or anything above it) is hidden. */
+  scoped(owner: THREE.Object3D): LabelMaker {
+    return {
+      add: (className = '') => {
+        const label = this.add(className);
+        label.owner = owner;
+        return label;
+      },
+    };
   }
 
   /** "+$12" rising from a world point and fading out. */
@@ -95,7 +113,8 @@ export class Labels {
 
   update(camera: THREE.Camera, width: number, height: number, dt: number): void {
     for (const label of this.labels) {
-      const show = label.visible && label.el.textContent !== '' && this.place(label.el, label.at, camera, width, height, 0);
+      const show =
+        label.visible && label.el.textContent !== '' && shown(label.owner) && this.place(label.el, label.at, camera, width, height, 0);
       label.el.style.display = show ? '' : 'none';
     }
     this.floaters = this.floaters.filter((f) => {
@@ -120,4 +139,10 @@ export class Labels {
     el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
     return true;
   }
+}
+
+/** Whether an object and all its parents are visible (true for no object). */
+function shown(owner: THREE.Object3D | undefined): boolean {
+  for (let o: THREE.Object3D | null | undefined = owner; o; o = o.parent) if (!o.visible || o.userData.hideLabels) return false;
+  return true;
 }

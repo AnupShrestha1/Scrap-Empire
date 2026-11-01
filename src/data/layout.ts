@@ -89,8 +89,15 @@ export const STATIONS: readonly StationDef[] = [
   bin('bin-titanium', 'titanium', 30, 8),
   bin('bin-gold', 'gold', 30, 11),
   bin('bin-platinum', 'platinum', 30, 14),
-  // The Scrap Dealer buys raw metal, south of the bins: a dead end off the route to the factory.
-  { id: 'dealer', kind: 'dealer', rect: { x: 28, y: 18, w: 3, h: 1 }, zones: { sell: { x: 28, y: 17, w: 3, h: 1 } } },
+  // The Scrap Dealer, south of the bins (a dead end off the route to the factory): the long pad buys the
+  // metal you carry, the small one beside it sells metal straight from the bins.
+  {
+    id: 'dealer',
+    kind: 'dealer',
+    // The booth stands behind its pads (seen from the south), so it never hides them.
+    rect: { x: 28, y: 17, w: 3, h: 1 },
+    zones: { sell: { x: 28, y: 18, w: 3, h: 1 }, stock: { x: 32, y: 18, w: 1, h: 1 } },
+  },
   // The factory: four line slots, each making whatever it's set to; products come out on the bay side.
   {
     id: 'factory',
@@ -124,6 +131,7 @@ export const STATIONS: readonly StationDef[] = [
   {
     id: 'bay-b',
     kind: 'bay',
+    requiresLevel: 4,
     rect: { x: 44, y: 13, w: 3, h: 1 },
     lane: { row: 13, parkX: 44, startX: 58 },
     zones: { load: { x: 42, y: 12, w: 2, h: 3 } },

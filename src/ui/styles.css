@@ -312,6 +312,20 @@ body {
   padding: 5px 12px;
   gap: 8px;
   font-size: 15px;
+  flex-wrap: wrap;
+  max-width: 190px;
+}
+
+.hud-next {
+  flex-basis: 100%;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9fb3c8;
+  line-height: 1;
+}
+
+.hud-next:empty {
+  display: none;
 }
 
 .hud-level-track {
@@ -586,3 +600,59 @@ body {
   font-size: 11px;
   color: #cfe3ff;
 }
+
+/* Milestone banner (src/ui/banner.ts). */
+.banner {
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  transform: translate(-50%, -50%);
+  padding: 14px 26px;
+  border-radius: 16px;
+  background: rgba(19, 36, 58, 0.94);
+  border: 3px solid #ffd76a;
+  color: #e8eef6;
+  text-align: center;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  max-width: calc(100% - 32px);
+}
+
+.banner.in {
+  animation: banner-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+@keyframes banner-in {
+  from {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0;
+  }
+}
+
+.banner-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffd76a;
+}
+
+.banner-body {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.banner-chest {
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #5cc84a;
+}
+
+.label3d.reveal-sign {
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(19, 36, 58, 0.8);
+  color: #ffd76a;
+  font-size: 12px;
+  text-shadow: none;
+}
+

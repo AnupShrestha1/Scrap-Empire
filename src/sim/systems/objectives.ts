@@ -1,9 +1,10 @@
-import { OBJECTIVES, type ObjectiveDef } from '../../data/objectives';
+import { OBJECTIVES, rotatingGoal, type ObjectiveDef } from '../../data/objectives';
 import type { SimEvent } from '../events';
 import type { GameState } from '../state';
 
+/** The current objective: the scripted chain, then endless rotating goals. */
 export function currentObjective(state: GameState): ObjectiveDef | undefined {
-  return OBJECTIVES[state.objectives.index];
+  return OBJECTIVES[state.objectives.index] ?? rotatingGoal(state.objectives.index - OBJECTIVES.length);
 }
 
 /**

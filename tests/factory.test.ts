@@ -185,7 +185,7 @@ describe('pad placement', () => {
     ] as const;
     const pads = STATIONS.flatMap((s) => {
       if (s.kind === 'cashPad' || s.kind === 'outlet') return [{ id: s.id, r: s.rect }];
-      if (s.kind === 'dealer') return [{ id: s.id, r: s.zones.sell }];
+      if (s.kind === 'dealer') return [{ id: s.id, r: s.zones.sell }, { id: `${s.id} stock`, r: s.zones.stock }];
       if (s.kind === 'factory') return [{ id: 'recipes', r: s.zones.recipes }];
       return [];
     });
