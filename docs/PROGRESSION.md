@@ -274,3 +274,48 @@ Changes made while tuning: business level thresholds lowered (see 7.4), supply 1
 - **Balance:** with weaker employees the first line still comes at about 4 minutes, but business level 5 moves from about 18 to about 26 minutes in the bot run. Worth tuning (cheaper staff upgrades, or a lower level-5 threshold) after playing.
 - **No silhouettes** (user, 2026-11-01): anything not unlocked is simply absent: not drawn and not solid (the simulation rebuilds its walkable map as stations open, moving anyone in the way). Bins appear when their metal is unlocked. What's next is shown on the HUD and the level-up banner instead.
 
+## 8. Balance pass (2026-11-02)
+
+### 8.1 How it's measured
+
+`npm run balance` plays 50 simulated minutes twice: an **efficient** player, and a **casual** one who walks 35% slower and pauses about a second before each decision. The bot plays sensibly: it saves for big unlocks (line slots, the second shredder, the Extraction levels that unlock a metal) when they're under ~90 s of income away, keeps small upgrades in step with its business level, stores the metal its lines and the waiting trucks need, and sells the rest. The report prints level times against targets, purchase gaps per phase, income by source (raw metal, stall products, truck orders, employee sales, objectives, chests), throughput (scrap delivered and shredded, products made, orders filled and missed) and spending. `BALANCE_TIMELINE=1` adds every event.
+
+### 8.2 Targets and results
+
+| Business level | Target (min) | Efficient | Casual |
+|---|---|---|---|
+| 2 | 1.5–2.5 | 1:51 | 2:26 |
+| 3 | 3–5 | 3:27 | 3:50 |
+| 4 | 7–10 | 9:01 | 8:46 |
+| 5 | 12–16 | 14:36 | 18:26 |
+| 6 | 18–24 | 21:34 | 26:26 |
+| 7 | 26–34 | 30:52 | 37:46 |
+| 8 | 36–46 | 40:19 | after 50 |
+
+| Phase | Longest wait between purchases | Target | Purchases |
+|---|---|---|---|
+| 0–10 min | 79 s | ≤ 90 s | 20 |
+| 10–30 min | 136 s | ≤ 150 s | 36 |
+| 30–50 min | 161 s | ≤ 240 s | 26 |
+
+Income grows steadily: about $440/min in the first 5 minutes, $1,600 by minute 12, $2,200 by 30, $5,000+ by 40. Truck orders become the main income after about 10 minutes, as intended; raw metal stays a steady side income. Orders expire rarely (0–4 per 5 minutes against up to 40 filled).
+
+### 8.3 What changed
+
+| | Before | Now | Why |
+|---|---|---|---|
+| Business levels | $300 / 800 / 3,000 / 10,000 / 25,000 / 70,000 / 180,000 | $300 / 800 / **4,000** / 10,000 / **20,000** / **38,000** / **70,000** | Level 4 came at 5:32 (too early), levels 6–8 at 26, 45 and never |
+| Scrap per delivery | 10 | **12** | Early income was capped by scrap supply; casual players slogged between levels 3 and 4 |
+| Supply upgrade | +2 scrap / −2 s per step, ×1.7 cost | **+3 / −2.5 s, ×1.6** | Scrap supply was the mid-game bottleneck (deliveries grew only 25 → 36/min) |
+| Extraction cost growth | ×1.75 | **×1.55** | It took half of all spending; later metals now arrive on time |
+| Truck orders | 4–8 items, 90 s patience | **3–6 items, 150 s** | A third to a half of mid-game orders expired with slow early employees |
+| Level chests (2–8) | $100 … $25,000 | $100 / 250 / 600 / **1,200 / 2,000 / 3,500 / 6,000** | Late chests were worth many minutes of income in one lump |
+| Late objective rewards | $3,000 / 5,000 / 10,000 / 20,000 | **$2,000 / 2,500 / 3,500 / 5,000** | Same: about one to two minutes of income each |
+| Rotating goals | $5,000 × 1.5 per round | **$3,000 × 1.4** | In line with late income |
+
+### 8.4 Still to check by playing
+
+- The bot fills truck orders well; real players may miss more of them early, before employees are upgraded.
+- The casual curve runs about 25% behind the efficient one, and reaches level 8 just after 50 minutes. That is about right for a game meant to last more than one session, but worth confirming.
+- Offline earnings (not built yet) will add to all of this once they're in.
+

@@ -90,10 +90,10 @@ export const OBJECTIVES: readonly ObjectiveDef[] = [
   { id: 'secondLine', target: 1, reward: 600, done: (s) => s.lines['line-2']?.built === true, hint: { station: 'factory', zone: 'build' } },
   { id: 'reachLevel5', target: 1, reward: 1000, done: level(5) },
   { id: 'unlockTitanium', target: 1, reward: 1500, done: extraction(3), hint: { station: 'pad-extraction', zone: 'buy' } },
-  { id: 'reachLevel6', target: 1, reward: 3000, done: level(6) },
-  { id: 'unlockGold', target: 1, reward: 5000, done: extraction(5), hint: { station: 'pad-extraction', zone: 'buy' } },
-  { id: 'reachLevel7', target: 1, reward: 10000, done: level(7) },
-  { id: 'unlockPlatinum', target: 1, reward: 20000, done: extraction(7), hint: { station: 'pad-extraction', zone: 'buy' } },
+  { id: 'reachLevel6', target: 1, reward: 2000, done: level(6) },
+  { id: 'unlockGold', target: 1, reward: 2500, done: extraction(5), hint: { station: 'pad-extraction', zone: 'buy' } },
+  { id: 'reachLevel7', target: 1, reward: 3500, done: level(7) },
+  { id: 'unlockPlatinum', target: 1, reward: 5000, done: extraction(7), hint: { station: 'pad-extraction', zone: 'buy' } },
 ];
 
 /** After the chain: goals that cycle through these, each round bigger and better paid. */
@@ -111,7 +111,7 @@ export function rotatingGoal(n: number): ObjectiveDef {
   return {
     id: goal.id,
     target: Math.round(goal.target * (1 + round * 0.5)),
-    reward: Math.round((5000 * 1.5 ** round) / 100) * 100,
+    reward: Math.round((3000 * 1.4 ** round) / 100) * 100,
     counts: goal.counts,
   };
 }

@@ -35,10 +35,10 @@ export const UPGRADES: Readonly<Record<UpgradeId, UpgradeDef>> = {
   // Business levels here match when each pad appears (unlocks.ts).
   shredderSpeed: { cost: 160, growth: 1.5, maxLevel: 8, requiresLevel: 2 },
   binSize: { cost: 140, growth: 1.5, maxLevel: 8, requiresLevel: 2 },
-  supply: { cost: 240, growth: 1.7, maxLevel: 8, requiresLevel: 3 },
+  supply: { cost: 240, growth: 1.6, maxLevel: 8, requiresLevel: 3 },
   shredderYield: { cost: 500, growth: 1.6, maxLevel: 6, requiresLevel: 3 },
   // Levels 1, 3, 5 and 7 unlock copper, titanium, gold and platinum (balance.ts METAL_FINDS).
-  extraction: { cost: 600, growth: 1.75, maxLevel: 8, levelGates: [3, 4, 5, 5, 6, 6, 7, 7] },
+  extraction: { cost: 600, growth: 1.55, maxLevel: 8, levelGates: [3, 4, 5, 5, 6, 6, 7, 7] },
   lineSpeed: { cost: 400, growth: 1.55, maxLevel: 8, requiresLine: 'line-1' },
   // Employees start slow with small hands; these make them worth more than an extra player only over time.
   staffSpeed: { cost: 300, growth: 1.6, maxLevel: 6, requiresLevel: 2 },
@@ -56,8 +56,8 @@ export const UPGRADE_EFFECTS = {
   shredderCycleFactor: 0.85,
   binPerLevel: 15,
   /** Supply levels alternate: odd levels add scrap per load, even levels shorten the wait between trucks. */
-  supplyLoadPerStep: 2,
-  supplyIntervalPerStepS: 2,
+  supplyLoadPerStep: 3,
+  supplyIntervalPerStepS: 2.5,
   supplyMinIntervalS: 6,
   /** Shredder output multiplied by 1 + this per Yield level. */
   yieldPerLevel: 0.1,

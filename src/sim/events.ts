@@ -13,7 +13,8 @@ export type SimEvent =
   | { type: 'itemMoved'; item: ItemId; from: Place; to: Place }
   | { type: 'processorStatus'; station: string; status: ProcessorStatus }
   | { type: 'storageFull'; station: string; item: ItemId }
-  | { type: 'sold'; station: string; item: ItemId; value: number }
+  /** `staff` is set when an employee made the sale. */
+  | { type: 'sold'; station: string; item: ItemId; value: number; staff?: true }
   | { type: 'processed'; station: string; item: ItemId }
   /** The shredder turned up a rarer metal than iron. */
   | { type: 'found'; station: string; item: ItemId }

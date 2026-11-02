@@ -5,7 +5,7 @@ import { RECIPES } from './recipes';
 export const SUPPLIER = {
   item: 'scrap' as ItemId,
   /** Scrap per delivery. */
-  load: 10,
+  load: 12,
   /** Seconds between one truck leaving and the next arriving. */
   intervalS: 16,
   /** The first truck of a new game comes quickly. */
@@ -117,9 +117,9 @@ export const ORDERS = {
   driveInS: 3,
   driveOutS: 3,
   /** How long a truck waits to be loaded before leaving without paying. */
-  patienceS: 90,
-  minAmount: 4,
-  maxAmount: 8,
+  patienceS: 150,
+  minAmount: 3,
+  maxAmount: 6,
   /** The first truck of a game wants only this many. */
   firstAmount: 3,
   /** A filled order pays this times the base price. */
@@ -153,7 +153,7 @@ export const SELL_PER_S = 10;
  * Lifetime earnings needed for each business level (index 0 is level 1). Levels unlock purchases, so new
  * options arrive at a steady pace instead of all at once.
  */
-export const BUSINESS_LEVELS: readonly number[] = [0, 300, 800, 3000, 10000, 25000, 70000, 180000];
+export const BUSINESS_LEVELS: readonly number[] = [0, 300, 800, 4000, 10000, 20000, 38000, 70000];
 
 /** Business level (1-based) for lifetime earnings. */
 export function businessLevel(earned: number): number {

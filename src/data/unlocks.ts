@@ -36,7 +36,7 @@ export function stationLevel(id: string): number {
 }
 
 /** Cash in the chest for reaching each business level (index = level). It doesn't count as earnings. */
-export const LEVEL_CHESTS: readonly number[] = [0, 0, 100, 250, 600, 1500, 4000, 10000, 25000];
+export const LEVEL_CHESTS: readonly number[] = [0, 0, 100, 250, 600, 1200, 2000, 3500, 6000];
 
 export function levelChest(level: number): number {
   return LEVEL_CHESTS[level] ?? 0;

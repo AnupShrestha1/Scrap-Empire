@@ -104,7 +104,8 @@ describe('employees', () => {
     const sim = simWith(state);
     run(sim, 40);
     const shredder = state.processors.shredder!;
-    const fed = shredder.hopper + (shredder.progress > 0 ? 1 : 0) + shredder.tray.iron + shredder.tray.aluminium;
+    // Fed: scrap in the hopper, being shredded, or already shredded (its metal may be in the bins by now).
+    const fed = shredder.hopper + (shredder.progress > 0 ? 1 : 0) + shredder.shredded;
     expect(fed).toBeGreaterThan(0);
   });
 

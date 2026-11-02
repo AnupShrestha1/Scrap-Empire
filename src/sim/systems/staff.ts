@@ -227,7 +227,7 @@ function sellOne(e: Employee, state: GameState, events: SimEvent[], station: str
   e.stack.splice(index, 1);
   state.money += PRICES[item];
   state.earned += PRICES[item];
-  events.push({ type: 'sold', station, item, value: PRICES[item] });
+  events.push({ type: 'sold', station, item, value: PRICES[item], staff: true });
   return 'more';
 }
 
