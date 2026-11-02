@@ -1159,3 +1159,22 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Narrow (phone portrait) screens: the HUD hugs the left and the round buttons stack down the right
+   edge, so they never sit on the level bar. */
+@media (max-width: 560px) {
+  .hud {
+    left: 10px;
+    transform: none;
+    align-items: flex-start;
+    max-width: calc(100vw - 74px);
+  }
+
+  .hud-objective {
+    max-width: calc(100vw - 74px);
+  }
+
+  .hud-buttons {
+    flex-direction: column;
+  }
+}

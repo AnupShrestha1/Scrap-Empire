@@ -21,7 +21,20 @@ interface Floater {
   age: number;
 }
 
+interface Placed {
+  label: Label;
+  x: number;
+  y: number;
+  w: number;
+  /** Distance from the middle of the screen. */
+  d: number;
+}
+
 const FLOAT_S = 0.9;
+/** Gap kept between a pad title and the screen edge. */
+const EDGE_PX = 4;
+/** Height of a pad title box, near enough, for overlap checks. */
+const PAD_TITLE_H = 40;
 const MAX_COINS = 8;
 
 /**
@@ -33,11 +46,13 @@ export class Labels implements LabelMaker {
   private readonly labels: Label[] = [];
   private floaters: Floater[] = [];
   private readonly v = new THREE.Vector3();
+  private readonly widths = new WeakMap<HTMLElement, { text: string; w: number }>();
 
   constructor(parent: HTMLElement) {
     this.layer = document.createElement('div');
     this.layer.className = 'labels3d';
-    parent.append(this.layer);
+    // First in the UI layer, so the HUD, cards and banners always draw over world labels.
+    parent.prepend(this.layer);
   }
 
   add(className = ''): Label {
@@ -112,10 +127,38 @@ export class Labels implements LabelMaker {
   }
 
   update(camera: THREE.Camera, width: number, height: number, dt: number): void {
+    const pads: Placed[] = [];
     for (const label of this.labels) {
-      const show =
-        label.visible && label.el.textContent !== '' && shown(label.owner) && this.place(label.el, label.at, camera, width, height, 0);
-      label.el.style.display = show ? '' : 'none';
+      const at = label.visible && label.el.textContent !== '' && shown(label.owner) ? this.project(label.at, camera, width, height) : null;
+      if (at && label.el.classList.contains('pad-title')) {
+        // Pad titles are boxes: keep them on screen (only for pads that are), and settle overlaps below.
+        if (at.x < 0 || at.x > width) {
+          label.el.style.display = 'none';
+          continue;
+        }
+        const w = this.widthOf(label.el);
+        pads.push({ label, x: Math.min(Math.max(at.x, w / 2 + EDGE_PX), width - w / 2 - EDGE_PX), y: at.y, w, d: Math.hypot(at.x - width / 2, at.y - height / 2) });
+        continue;
+      }
+      if (at && label.el.classList.contains('area-title') && at.x >= 0 && at.x <= width) {
+        // Area names (the dump site) are kept on screen too, but never hidden by other labels.
+        const w = this.widthOf(label.el);
+        at.x = Math.min(Math.max(at.x, w / 2 + EDGE_PX), width - w / 2 - EDGE_PX);
+      }
+      if (at) this.move(label.el, at.x, at.y);
+      label.el.style.display = at ? '' : 'none';
+    }
+    // Where pad titles overlap (packed pads on a narrow phone screen), the one nearest the middle of the
+    // screen, where the player is, wins and the others hide until the player walks closer.
+    pads.sort((a, b) => a.d - b.d);
+    const kept: Placed[] = [];
+    for (const p of pads) {
+      const clash = kept.some((k) => Math.abs(k.x - p.x) < (k.w + p.w) / 2 + 2 && Math.abs(k.y - p.y) < PAD_TITLE_H);
+      if (!clash) {
+        kept.push(p);
+        this.move(p.label.el, p.x, p.y);
+      }
+      p.label.el.style.display = clash ? 'none' : '';
     }
     this.floaters = this.floaters.filter((f) => {
       f.age += dt;
@@ -132,12 +175,32 @@ export class Labels implements LabelMaker {
 
   /** Positions `el` over world point `at`; false when it's behind the camera. */
   private place(el: HTMLElement, at: THREE.Vector3, camera: THREE.Camera, width: number, height: number, liftPx: number): boolean {
+    const p = this.project(at, camera, width, height);
+    if (p) this.move(el, p.x, p.y + liftPx);
+    return p !== null;
+  }
+
+  /** Screen position of a world point, or null when it's behind the camera. */
+  private project(at: THREE.Vector3, camera: THREE.Camera, width: number, height: number): { x: number; y: number } | null {
     this.v.copy(at).project(camera);
-    if (this.v.z > 1) return false;
-    const x = (this.v.x * 0.5 + 0.5) * width;
-    const y = (-this.v.y * 0.5 + 0.5) * height + liftPx;
+    if (this.v.z > 1) return null;
+    return { x: (this.v.x * 0.5 + 0.5) * width, y: (-this.v.y * 0.5 + 0.5) * height };
+  }
+
+  private move(el: HTMLElement, x: number, y: number): void {
     el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
-    return true;
+  }
+
+  /** A label's width, measured again only when its text changes (measuring every frame forces layout). */
+  private widthOf(el: HTMLElement): number {
+    const cached = this.widths.get(el);
+    if (cached && cached.text === el.textContent) return cached.w;
+    const shownBefore = el.style.display;
+    el.style.display = '';
+    const w = el.offsetWidth;
+    el.style.display = shownBefore;
+    this.widths.set(el, { text: el.textContent ?? '', w });
+    return w;
   }
 }
 

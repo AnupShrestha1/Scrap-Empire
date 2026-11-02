@@ -231,7 +231,8 @@ export class ShredderView implements View {
   private readonly ring = new RingGauge(0x5cc84a, 0.8);
   private readonly note: Label;
   /** A machine bought later: an empty plot with a build pad until then. */
-  private readonly plot?: { ghost: THREE.Object3D; pad: THREE.Object3D; label: Label };
+  private readonly plot?: { pad: THREE.Object3D; label: Label };
+  private readonly inputPad: THREE.Object3D;
   private wasBuilt: boolean | null = null;
   private popAge = Infinity;
 
@@ -258,14 +259,15 @@ export class ShredderView implements View {
     this.tray.root.position.copy(centre(def.zones.output)).setX(def.zones.output.x + 0.03 + 0.3);
     this.note = labels.add('note');
     this.note.at.copy(centre(def.zones.output, 1.4));
-    scene.add(this.body, this.lamp, this.ring.root, this.tray.root, new PadProp(def.zones.input.w, def.zones.input.h, '▲', 0x6b6f8a).placeOn(def.zones.input).root);
+    this.inputPad = new PadProp(def.zones.input.w, def.zones.input.h, '▲', 0x6b6f8a).placeOn(def.zones.input).root;
+    scene.add(this.body, this.lamp, this.ring.root, this.tray.root, this.inputPad);
     if (def.build && def.zones.build) {
-      const ghost = new PadProp(def.rect.w, def.rect.h, '2', 0x6b6f8a).placeOn(def.rect).root;
+      // Until it's bought, only its build pad shows: no plot markings or input pad for a machine that isn't there.
       const pad = new PadProp(def.zones.build.w, def.zones.build.h, '⚒', 0x3a7bd5).placeOn(def.zones.build).root;
       const label = labels.add('pad-title');
       label.at.copy(centre(def.zones.build, 0.7));
-      scene.add(ghost, pad);
-      this.plot = { ghost, pad, label };
+      scene.add(pad);
+      this.plot = { pad, label };
     }
   }
 
@@ -276,7 +278,7 @@ export class ShredderView implements View {
       if (this.wasBuilt === false && m.built) this.popAge = 0;
       this.wasBuilt = m.built;
       this.popAge += dt;
-      this.plot.ghost.visible = this.plot.pad.visible = !m.built;
+      this.plot.pad.visible = !m.built;
       const locked = businessLevel(sim.state.earned) < this.def.build!.requiresLevel;
       if (m.built) setText(this.plot.label, '');
       else {
@@ -284,7 +286,7 @@ export class ShredderView implements View {
         padTitle(this.plot.label, t('shredder.build'), price, locked);
       }
     }
-    for (const o of [this.body, this.lamp, this.ring.root, this.tray.root]) o.visible = m.built;
+    for (const o of [this.body, this.lamp, this.ring.root, this.tray.root, this.inputPad]) o.visible = m.built;
     if (!m.built) return;
     const k = Math.min(1, this.popAge / 0.5);
     this.body.scale.setScalar(k < 1 ? Math.max(0.01, Math.sin(k * Math.PI * 0.75) / Math.sin(Math.PI * 0.75)) : 1);
