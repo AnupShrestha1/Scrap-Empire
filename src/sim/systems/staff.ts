@@ -124,6 +124,20 @@ function chooseTarget(e: Employee, state: GameState, world: StaffWorld, brains: 
     return best;
   };
 
+  const trayJob = (): StaffTarget | null => {
+    for (const s of shredders) {
+      if (taken.trays.has(s.id)) continue;
+      const machine = state.processors[s.id]!;
+      const tray = machine.tray;
+      const storable = ITEM_IDS.some((item) => tray[item] > 0 && binFor(world, item) && binRoom(state, binFor(world, item)!) > 0);
+      if (storable) return { kind: 'tray', shredderId: s.id, overflow: false };
+      // The bins are full: once the tray is nearly full too, sell its metal rather than let the shredder stop.
+      const nearlyFull = trayTotal(machine) >= trayCapacity(s, state) - 2;
+      if (nearlyFull && world.dealer) return { kind: 'tray', shredderId: s.id, overflow: true };
+    }
+    return null;
+  };
+
   if (e.stack.length > 0) {
     for (const item of new Set(e.stack)) {
       if (isProduct(item)) {
@@ -142,6 +156,10 @@ function chooseTarget(e: Employee, state: GameState, world: StaffWorld, brains: 
       const more = room > 0 && space > e.stack.length ? nearestPiece() : undefined;
       if (more) return { kind: 'piece', pieceId: more.id };
       if (target && space > 0) return { kind: 'hopper', shredderId: target.id };
+      // Every hopper is full, so a shredder's tray is backed up (its bins full too): clear it, scrap in
+      // hand and all, and sell the excess metal, or nobody ever frees the shredder.
+      // (The scrap doesn't count against their hands for this, so even full hands can unjam it.)
+      return trayJob();
     }
     return null;
   }
@@ -157,16 +175,8 @@ function chooseTarget(e: Employee, state: GameState, world: StaffWorld, brains: 
     const stuck = lines(world).find((l) => !taken.lineClear.has(l.id) && stuckLine(world, state, l));
     if (stuck) return { kind: 'line', lineId: stuck.id, bayId: null };
   }
-  for (const s of shredders) {
-    if (taken.trays.has(s.id)) continue;
-    const machine = state.processors[s.id]!;
-    const tray = machine.tray;
-    const storable = ITEM_IDS.some((item) => tray[item] > 0 && binFor(world, item) && binRoom(state, binFor(world, item)!) > 0);
-    if (storable) return { kind: 'tray', shredderId: s.id, overflow: false };
-    // The bins are full: once the tray is nearly full too, sell its metal rather than let the shredder stop.
-    const nearlyFull = trayTotal(machine) >= trayCapacity(s, state) - 2;
-    if (nearlyFull && world.dealer) return { kind: 'tray', shredderId: s.id, overflow: true };
-  }
+  const tray = trayJob();
+  if (tray) return tray;
   const target = roomiest();
   if (target && hopperRoom(target) > 0) {
     const piece = nearestPiece();
@@ -252,7 +262,8 @@ function act(e: Employee, target: StaffTarget, state: GameState, world: StaffWor
     }
     case 'tray': {
       const tray = state.processors[target.shredderId]!.tray;
-      if (room <= 0) return 'done';
+      // Scrap already in hand doesn't take room here: an employee stuck holding it can still clear the jam.
+      if (staffCapacity(state) - e.stack.filter((i) => i !== 'scrap').length <= 0) return 'done';
       const item = ITEM_IDS.find((i) => {
         if (tray[i] === 0) return false;
         if (target.overflow) return true;

@@ -3,7 +3,7 @@ import { BUSINESS_LEVELS, STAFF } from '../src/data/balance';
 import { STATIONS, YARD } from '../src/data/layout';
 import { PURCHASE, UPGRADE_EFFECTS, UPGRADES } from '../src/data/upgrades';
 import { PLAYER } from '../src/data/player';
-import { staffCapacity, staffSpeed } from '../src/sim/effective';
+import { hopperCapacity, staffCapacity, staffSpeed, trayCapacity } from '../src/sim/effective';
 import { memoryStorage } from '../src/platform/memoryStorage';
 import { SAVE_KEYS, SaveManager } from '../src/save/saveManager';
 import { parseGrid } from '../src/sim/grid';
@@ -11,7 +11,7 @@ import { findPath, walkable } from '../src/sim/path';
 import { Simulation } from '../src/sim/simulation';
 import { createNewGame, isGameState, sanitizeState, secondsToTicks, type GameState } from '../src/sim/state';
 import type { SimEvent } from '../src/sim/events';
-import type { StaffHutDef } from '../src/sim/stations';
+import type { ProcessorDef, StaffHutDef } from '../src/sim/stations';
 import { newInteractionState, stepInteraction } from '../src/sim/systems/interaction';
 
 const grid = parseGrid(YARD, STATIONS);
@@ -176,6 +176,30 @@ describe('employees', () => {
     expect(sold.every((e) => e.type === 'sold' && e.station === 'dealer')).toBe(true);
     expect(state.money).toBeGreaterThan(0);
     expect(state.bins['bin-iron']!.count).toBe(30);
+  });
+
+  it('unjam a backed-up shredder even with their hands full of scrap', () => {
+    const state = createNewGame(grid, STATIONS);
+    state.field.pieces = [];
+    state.truck.timer = secondsToTicks(600);
+    state.bins['bin-iron']!.count = 30;
+    const shredder = state.processors.shredder!;
+    const def = STATIONS.find((st) => st.id === 'shredder')!;
+    shredder.hopper = hopperCapacity(def as ProcessorDef, state);
+    shredder.tray.iron = trayCapacity(def as ProcessorDef, state);
+    addEmployee(state, 24.5, 14.5);
+    const e = state.employees[0]!;
+    while (e.stack.length < staffCapacity(state)) e.stack.push('scrap');
+    const sold: SimEvent[] = [];
+    const drained: SimEvent[] = [];
+    const sim = simWith(state);
+    for (let i = 0; i < 4 * 90; i++) {
+      sim.advance(250);
+      sold.push(...sim.drainEvents(drained).filter((ev) => ev.type === 'sold'));
+    }
+    expect(sold.length).toBeGreaterThan(0);
+    // The shredder ran again, and the scrap in hand went into it.
+    expect(e.stack.filter((i) => i === 'scrap').length).toBeLessThan(staffCapacity(state));
   });
 
   it('clear a line stuck on old products by selling them at the stall', () => {
