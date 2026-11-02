@@ -448,11 +448,11 @@ export class StaffView implements View {
       this.characters.push(c);
       this.scene.add(c.root);
     }
+    const alpha = sim.alpha;
     list.forEach((e, i) => {
-      const c = this.characters[i]!;
-      // Employees move on the simulation tick; ease towards them so they glide like the player.
-      const k = 1 - Math.exp(-20 * dt);
-      c.update(dt, c.root.position.x + (e.x - c.root.position.x) * k, c.root.position.z + (e.y - c.root.position.z) * k, e.stack);
+      // Employees move on the simulation tick; blend between the last two ticks, as for the player.
+      const prev = sim.prevStaff.get(e.id) ?? e;
+      this.characters[i]!.update(dt, prev.x + (e.x - prev.x) * alpha, prev.y + (e.y - prev.y) * alpha, e.stack);
     });
   }
 }

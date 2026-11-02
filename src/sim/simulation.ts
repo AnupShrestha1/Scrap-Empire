@@ -36,6 +36,8 @@ export class Simulation {
   readonly stations: readonly StationDef[];
   /** Player position at the start of the latest tick, for interpolating the sprite between ticks. */
   readonly prevPlayer: Vec2;
+  /** Each employee's position at the start of the latest tick, by id, likewise. */
+  readonly prevStaff = new Map<number, Vec2>();
   /** Set when saved state changes in a way worth saving; the autosaver clears it. */
   dirty = false;
   /** Wall-clock time spent in the last advance() call, for the debug overlay. */
@@ -279,6 +281,8 @@ export class Simulation {
     const p = state.player;
     this.prevPlayer.x = p.x;
     this.prevPlayer.y = p.y;
+    this.prevStaff.clear();
+    for (const e of state.employees) this.prevStaff.set(e.id, { x: e.x, y: e.y });
     truckRects(state.truck, this.bayStates, this.trucks);
     let changed = stepPlayer(p, this.move, this.grid, TICK_MS / 1000, this.trucks);
     if (this.dropRequested) {
