@@ -301,8 +301,9 @@ export class PileProp {
   readonly root = new THREE.Group();
   private readonly meshes = new Map<ItemId, THREE.InstancedMesh>();
 
-  constructor(items: readonly ItemId[], private readonly perItem = 12) {
-    this.root.add(mesh(new THREE.BoxGeometry(0.9, 0.12, 0.9).translate(0, 0.06, 0), 0xb08050));
+  /** `width` is the pallet's size across x (towards the machine it serves); it's 0.9 deep. */
+  constructor(items: readonly ItemId[], private readonly perItem = 12, width = 0.9) {
+    this.root.add(mesh(new THREE.BoxGeometry(width, 0.12, 0.9).translate(0, 0.06, 0), 0xb08050));
     items.forEach((item) => {
       const im = new THREE.InstancedMesh(ITEM_GEOMETRY[item], itemMaterial(item), perItem);
       im.castShadow = true;

@@ -226,7 +226,7 @@ export class BayView implements View {
 export class ShredderView implements View {
   private readonly body = new THREE.Group();
   private readonly cogs: THREE.Object3D[] = [];
-  private readonly tray = new PileProp(METALS, 12);
+  private readonly tray = new PileProp(METALS, 12, 0.6);
   private readonly lamp = lamp();
   private readonly ring = new RingGauge(0x5cc84a, 0.8);
   private readonly note: Label;
@@ -254,7 +254,8 @@ export class ShredderView implements View {
     this.lamp.position.copy(top);
     this.ring.root.position.copy(top).add(new THREE.Vector3(0, 0.55, 0));
     // Against the machine's side, so the worker collecting from the spot doesn't stand in it.
-    this.tray.root.position.copy(centre(def.zones.output)).setX(def.zones.output.x + 0.1);
+    // Flush against the outside of the machine's footprint, never into it (overlapping faces flicker).
+    this.tray.root.position.copy(centre(def.zones.output)).setX(def.zones.output.x + 0.03 + 0.3);
     this.note = labels.add('note');
     this.note.at.copy(centre(def.zones.output, 1.4));
     scene.add(this.body, this.lamp, this.ring.root, this.tray.root, new PadProp(def.zones.input.w, def.zones.input.h, '▲', 0x6b6f8a).placeOn(def.zones.input).root);

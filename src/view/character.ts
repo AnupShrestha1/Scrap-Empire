@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ItemId } from '../data/items';
+import { ITEM_IDS, type ItemId } from '../data/items';
 import { PLAYER } from '../data/player';
 import type { ModelKey, Models } from './assets';
 import { ITEM_HEIGHT, itemGeometry, itemMaterial } from './props';
@@ -54,6 +54,8 @@ export class Character {
     this.stack.position.set(0, 0.55, -0.42);
     this.stack.scale.setScalar(1.3);
     this.root.add(this.stack);
+    // Every item's stack mesh up front, so the first pick-up of a new kind adds no new object to the scene.
+    for (const item of ITEM_IDS) this.stackMesh(item);
   }
 
   /** Moves to (x, z) this frame; facing and animation follow from the movement. */

@@ -34,7 +34,8 @@ export class DebugOverlay {
   ) {
     this.el = document.createElement('div');
     this.el.className = 'debug-overlay';
-    this.el.hidden = !(import.meta.env.DEV || new URLSearchParams(location.search).has('debug'));
+    const allowed = import.meta.env.DEV || new URLSearchParams(location.search).has('debug');
+    this.el.hidden = !allowed;
     this.readout = document.createElement('pre');
 
     const tools = document.createElement('div');
@@ -62,9 +63,12 @@ export class DebugOverlay {
     this.el.append(this.readout, tools);
     layer.append(this.el);
 
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Backquote') this.el.hidden = !this.el.hidden;
-    });
+    // Release players can't open it (it has a cash cheat): only in dev builds or with ?debug.
+    if (allowed) {
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Backquote') this.el.hidden = !this.el.hidden;
+      });
+    }
     setInterval(() => this.render(), REFRESH_MS);
   }
 

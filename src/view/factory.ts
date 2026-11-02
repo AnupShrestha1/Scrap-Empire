@@ -21,6 +21,9 @@ const LOW = 0.6;
 const THICK = 0.2;
 /** How long a newly built line takes to pop into place. */
 const POP_S = 0.5;
+/** Output pallets: their width, and the gap left between them and the wall. */
+const PALLET_W = 0.55;
+const PALLET_GAP = 0.03;
 
 interface LineParts {
   def: LineDef;
@@ -102,9 +105,10 @@ export class FactoryView implements View {
       note.at.set(spot.x, 2.3, z);
       const name = labels.add('line-name');
       name.at.set(spot.x, 1.75, z);
-      // Half inside the wall, like a hatch, so the worker collecting from the spot doesn't stand in it.
-      const pile = new PileProp(PRODUCTS, LINE_OUTPUT);
-      pile.root.position.copy(centre(line.output)).setX(line.output.x - 0.15);
+      // A narrow pallet flush against the outside of the wall (never through it, which flickers), so the
+      // worker collecting from the spot stands beside it rather than in it.
+      const pile = new PileProp(PRODUCTS, LINE_OUTPUT, PALLET_W);
+      pile.root.position.copy(centre(line.output)).setX(line.output.x + PALLET_GAP + PALLET_W / 2);
       scene.add(machine, ghost, l, ring.root, pile.root);
       this.lines.push({ def: line, machine, ghost, lamp: l, ring, note, name, pile, builtAge: Infinity, wasBuilt: false, ...parts });
     });

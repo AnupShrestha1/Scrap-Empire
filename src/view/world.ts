@@ -116,6 +116,9 @@ export class World {
   }
 
   start(): void {
+    // Compile every shader now (the hidden stack and flyer meshes too), rather than on the frame a new
+    // kind of item first shows up, which stalled big pick-ups.
+    this.renderer.compile(this.scene, this.camera);
     this.lastFrameAt = performance.now();
     this.renderer.setAnimationLoop((time) => this.frame(time));
   }
