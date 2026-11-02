@@ -12,7 +12,9 @@ import { newInteractionState, padCharge, stepInteraction, type InteractionState 
 import { stepPlayer } from './systems/player';
 import { processorCycleTicks, shredderFinds, stationOpen, trayCapacity } from './effective';
 import { PLAYER } from '../data/player';
-import { businessLevel, PRICES } from '../data/balance';
+import { businessLevel, OFFLINE, PRICES } from '../data/balance';
+import { offlineEarnings, type OfflineResult } from './offline';
+import { PLAYER_PLACE } from './events';
 import { levelChest } from '../data/unlocks';
 import { stepObjectives } from './systems/objectives';
 import { processorStatus, stepProcessor } from './systems/processing';
@@ -128,6 +130,46 @@ export class Simulation {
     return this.accumulator / TICK_MS;
   }
 
+  /**
+   * Updates the running estimates offline earnings use: the share of item moves made by employees, and
+   * the income this tick (sales and orders, not objective rewards) times that share.
+   */
+  private trackAutomation(earnedBefore: number, tickEvents: readonly SimEvent[]): void {
+    const state = this.state;
+    let staff = 0;
+    let player = 0;
+    let rewards = 0;
+    for (const e of tickEvents) {
+      if (e.type === 'itemMoved') {
+        if (e.from.startsWith('staff-') || e.to.startsWith('staff-')) staff++;
+        else if (e.from === PLAYER_PLACE || e.to === PLAYER_PLACE) player++;
+      }
+      if (e.type === 'objectiveDone') rewards += e.reward;
+    }
+    // The share averages over roughly the last OFFLINE.shareWindowMoves item moves; the rate over time.
+    const moves = staff + player;
+    if (moves > 0) state.staffShare += (staff / moves - state.staffShare) * Math.min(1, moves / OFFLINE.shareWindowMoves);
+    const k = 1 / (OFFLINE.rateWindowS * SIM.tickRate);
+    if (state.employees.length === 0) state.staffShare = 0;
+    const income = Math.max(0, state.earned - earnedBefore - rewards) * SIM.tickRate;
+    state.autoRate += (income * state.staffShare - state.autoRate) * k;
+  }
+
+  /**
+   * Pays what the employees earned while the player was away (offline.ts) and announces any business
+   * levels it passes. Returns the result, or null when nothing was earned.
+   */
+  applyOffline(awayMs: number): OfflineResult | null {
+    const result = offlineEarnings(this.state, awayMs);
+    if (!result) return null;
+    const before = businessLevel(this.state.earned);
+    this.state.money += result.amount;
+    this.state.earned += result.amount;
+    this.levelUp(before, businessLevel(this.state.earned));
+    this.dirty = true;
+    return result;
+  }
+
   /** Announces each business level passed between `from` and `to`, paying its chest. */
   private levelUp(from: number, to: number): void {
     for (let level = from + 1; level <= to; level++) {
@@ -233,6 +275,7 @@ export class Simulation {
     this.refreshGrid();
     const firstEvent = events.length;
     const levelBefore = businessLevel(state.earned);
+    const earnedBefore = state.earned;
     const p = state.player;
     this.prevPlayer.x = p.x;
     this.prevPlayer.y = p.y;
@@ -272,6 +315,7 @@ export class Simulation {
     // Objectives look at this tick's events only (earlier ones may not have been drained yet).
     changed = stepObjectives(state, events.slice(firstEvent), events) || changed;
     this.levelUp(levelAfter, businessLevel(state.earned));
+    this.trackAutomation(earnedBefore, events.slice(firstEvent));
     if (changed) this.dirty = true;
     state.tick++;
   }

@@ -18,6 +18,7 @@ import { createStationViews, HintArrow, lineName, StaffView, type StationViews }
 import { RecipeCard } from '../ui/recipes';
 import { StockCard } from '../ui/stock';
 import { Banner } from '../ui/banner';
+import type { OfflineResult } from '../sim/offline';
 import { Reveal } from './reveal';
 import type { StringKey } from '../i18n';
 import { unlockedMetals } from '../sim/effective';
@@ -228,6 +229,16 @@ export class World {
     this.renderer.setSize(this.width, this.height);
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
+  }
+
+  /** The welcome-back banner with what the employees earned while the player was away. */
+  showOffline(result: OfflineResult): void {
+    const mins = Math.round(result.awaySeconds / 60);
+    const away = mins >= 60 ? t('offline.hours', { h: Math.floor(mins / 60), m: mins % 60 }) : t('offline.minutes', { m: Math.max(1, mins) });
+    const capped = result.awaySeconds > result.seconds ? ` ${t('offline.capped')}` : '';
+    this.banner.show(t('offline.title'), `${t('offline.body', { away })}${capped}`, `+$${result.amount.toLocaleString('en-US')}`, 4500);
+    this.labels.coinBurst(this.player.root.position.clone().setY(1.5), this.camera, this.width, this.height, result.amount);
+    this.ctx.sfx.play('objective');
   }
 
   /** A toast for each metal the shredder has just become able to find. */

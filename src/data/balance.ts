@@ -93,6 +93,20 @@ export const BINS = {
 /** Finished products a factory line holds on its output spot before it pauses. */
 export const LINE_OUTPUT = 8;
 
+/** Offline progress: what the employees earn while the player is away. */
+export const OFFLINE = {
+  /** Most time credited (the design's ~2 h cap). */
+  capS: 2 * 60 * 60,
+  /** Shorter absences earn nothing (and a hidden tab under this just pauses). */
+  minAwayS: 60,
+  /** Share of the measured automated income paid while away. */
+  efficiency: 0.6,
+  /** How many seconds of play the running income estimate averages over. */
+  rateWindowS: 180,
+  /** How many item moves the employees' share of the work averages over. */
+  shareWindowMoves: 100,
+};
+
 /** Employees, hired at the staff hut. */
 export const STAFF = {
   /**

@@ -139,6 +139,10 @@ export interface GameState {
   hirePaid: number;
   /** Set once the first buyer truck has been sent (it comes the moment the first product is made). */
   firstOrder: boolean;
+  /** Running estimate of what the employees earn, in $/s (see offline.ts). */
+  autoRate: number;
+  /** Running share (0..1) of item moves the employees make rather than the player. */
+  staffShare: number;
 }
 
 export function secondsToTicks(seconds: number): number {
@@ -168,6 +172,8 @@ export function createNewGame(grid: Grid, stations: readonly StationDef[]): Game
     employees: [],
     hirePaid: 0,
     firstOrder: false,
+    autoRate: 0,
+    staffShare: 0,
   };
   return sanitizeState(state, grid, stations);
 }
@@ -195,6 +201,8 @@ export function isGameState(value: unknown): value is GameState {
     isField(value.field) &&
     isCount(value.hirePaid) &&
     typeof value.firstOrder === 'boolean' &&
+    isRate(value.autoRate) &&
+    isRate(value.staffShare) &&
     Array.isArray(value.employees) &&
     value.employees.every(
       (e: unknown) =>
@@ -316,6 +324,10 @@ function isField(value: unknown): boolean {
       (p.kind as number) < PIECE_KINDS.length &&
       (p.locked === undefined || typeof p.locked === 'boolean'),
   );
+}
+
+function isRate(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 function isProductId(value: unknown): boolean {

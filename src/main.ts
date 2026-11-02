@@ -59,6 +59,22 @@ async function boot(): Promise<void> {
   world.start();
   platform.gameplayStart();
 
+  // Offline progress: the employees' earnings for the time since the last save, and again whenever the
+  // tab comes back after being hidden (the simulation itself pauses while hidden).
+  const welcome = (awayMs: number) => {
+    const result = sim.applyOffline(awayMs);
+    if (result) {
+      world.showOffline(result);
+      autosave.saveNow();
+    }
+  };
+  if (loaded) welcome(Date.now() - loaded.savedAt);
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+    else if (hiddenAt) welcome(Date.now() - hiddenAt);
+  });
+
   const fps = fpsCounter();
   new DebugOverlay(uiEl, ctx, {
     viewLines: () => {

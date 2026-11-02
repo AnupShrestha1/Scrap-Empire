@@ -1,7 +1,7 @@
 import { ITEM_IDS } from '../data/items';
 
 /** Current save format. Bump it, and add a migration, whenever GameState changes shape. */
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 export type Migration = (state: unknown) => unknown;
 
@@ -159,6 +159,8 @@ export const MIGRATIONS: Migrations = {
       upgradePaid: { ...zero, ...(s.upgradePaid as Json) },
     };
   },
+  /** v13 → v14: the running estimates behind offline earnings, starting from nothing. */
+  13: (state) => ({ ...(state as Json), autoRate: 0, staffShare: 0 }),
 };
 
 /** Runs every migration from `from` up to `to`. Throws if one is missing. */
