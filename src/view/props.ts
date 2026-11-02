@@ -10,7 +10,7 @@ export const COLORS = {
   grassDark: 0x6faa48,
   dirt: 0xd2b07a,
   dump: 0xa5835a,
-  concrete: 0xc3c7cf,
+  concrete: 0x9a9ea6,
   road: 0x5d6170,
   water: 0x4aa8e0,
   trunk: 0x8a5a3c,

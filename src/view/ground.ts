@@ -60,6 +60,7 @@ export function buildGround(grid: Grid, models: Models): THREE.Object3D {
       speckle(g, tile, GROUND_COLOR[tile] ?? COLORS.dirt, x, y);
     }
   }
+  kerbs(g, grid);
   roadMarkings(g, grid);
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -289,9 +290,44 @@ function speckle(g: CanvasRenderingContext2D, tile: TileId, base: number, x: num
     g.fillRect(px, py, size, tile === Tile.Grass || tile === Tile.Tree ? size * 1.8 : size);
   }
   if (tile === Tile.Concrete) {
-    g.fillStyle = shade(base, -0.05);
+    // Two-tile slabs with seams, a slight tone change per slab, and the odd oil stain.
+    const slab = hash(x >> 1, y >> 1);
+    g.fillStyle = shade(base, (slab - 0.5) * 0.04);
+    g.fillRect(x * PX, y * PX, PX, PX);
+    g.fillStyle = shade(base, -0.07);
     if (x % 2 === 0) g.fillRect(x * PX, y * PX, 1, PX);
     if (y % 2 === 0) g.fillRect(x * PX, y * PX, PX, 1);
+    if (hash(x * 7 + 3, y * 5 + 1) > 0.93) {
+      g.fillStyle = 'rgba(40, 42, 50, 0.18)';
+      g.beginPath();
+      g.ellipse(x * PX + PX / 2, y * PX + PX / 2, PX * 0.35, PX * 0.22, hash(x, y) * Math.PI, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+}
+
+/** A raised kerb around each concrete area: a dark outer line and a light top edge. */
+function kerbs(g: CanvasRenderingContext2D, grid: Grid): void {
+  const sides = [
+    [0, -1, 0, 0, PX, 0],
+    [0, 1, 0, PX, PX, 0],
+    [-1, 0, 0, 0, 0, PX],
+    [1, 0, PX, 0, 0, PX],
+  ] as const;
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      if (tileAt(grid, x, y) !== Tile.Concrete) continue;
+      for (const [dx, dy, ox, oy, w, h] of sides) {
+        const next = tileAt(grid, x + dx, y + dy);
+        if (next === undefined || next === Tile.Concrete) continue;
+        const px = x * PX + ox - (dx > 0 ? 3 : 0);
+        const py = y * PX + oy - (dy > 0 ? 3 : 0);
+        g.fillStyle = shade(COLORS.concrete, -0.18);
+        g.fillRect(px, py, w || 3, h || 3);
+        g.fillStyle = shade(COLORS.concrete, 0.08);
+        g.fillRect(px + (dx < 0 ? 3 : dx > 0 ? -1 : 0), py + (dy < 0 ? 3 : dy > 0 ? -1 : 0), w || 1, h || 1);
+      }
+    }
   }
 }
 
